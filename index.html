@@ -61,7 +61,8 @@
 </head>
 <body>
   <h1>貸株料の効率計算</h1>
-  <p>※ 貸株料率は年利3.9%の前提で計算</p>
+  <p>※1 貸株料率は年利3.9%の前提で計算  ※2 SBIはフライングクロス日</p>
+  <strong><font color="blue">実際は下記日付の前営業日19時から注文可</font></strong>
   <p>×のついた日の次の日にポジションを取るのが相対的には効率良い気がする。</p>
   <div class="input-container">
     <label for="inputValue">金額:</label>
@@ -74,55 +75,81 @@
     const holidaysApiUrl = "https://holidays-jp.github.io/api/v1/date.json";
 
     async function getBusinessDaysForNext13Months() {
-      const holidays = await fetchHolidays(new Date().getFullYear());
-      const businessDaysList = [];
-      
-      for (let monthOffset = 0; monthOffset < 6; monthOffset++) {
-        const currentMonth = new Date();
-        currentMonth.setMonth(currentMonth.getMonth() + monthOffset);
+        const currentYear = new Date().getFullYear();
+        const holidays = await fetchHolidays([currentYear, currentYear + 1]);
+        const businessDaysList = [];
+        console.log(holidays);
+        for (let monthOffset = 0; monthOffset < 6; monthOffset++) {
+            const currentMonth = new Date();
+            currentMonth.setMonth(currentMonth.getMonth() + monthOffset);
 
-        const lastBusinessDay = await getLastBusinessDayOfMonth(currentMonth.getFullYear(), currentMonth.getMonth(), holidays);
-        const oneBusinessDayBefore = await getNthBusinessDayBefore(lastBusinessDay, 1, holidays);
-        const twoBusinessDaysBefore = await getNthBusinessDayBefore(lastBusinessDay, 2, holidays);
-        const B = await getNthBusinessDayAfter(oneBusinessDayBefore, 2, holidays);
+            const lastBusinessDay = await getLastBusinessDayOfMonth(currentMonth.getFullYear(), currentMonth.getMonth(), holidays);
+            const oneBusinessDayBefore = await getNthBusinessDayBefore(lastBusinessDay, 1, holidays);
+            const twoBusinessDaysBefore = await getNthBusinessDayBefore(lastBusinessDay, 2, holidays);
+            const fifteenBusinessDaysBefore = await getNthBusinessDayBefore(oneBusinessDayBefore, 15, holidays);
+            const B = await getNthBusinessDayAfter(oneBusinessDayBefore, 2, holidays);
 
-        const A_start = twoBusinessDaysBefore;
-        const A_Days = [];
-        let previousDaysDifference = null;
-        
-        for (let i = 1; i <= 9; i++) {
-          const A = await getNthBusinessDayBefore(oneBusinessDayBefore, i, holidays);
-          const A_plus_2 = await getNthBusinessDayAfter(A, 2, holidays);
-          const daysDifference = Math.abs(calculateDaysBetween(A_plus_2, B)) + 1;
-          let mark = "";
-          
-          if (previousDaysDifference !== null && daysDifference - previousDaysDifference >= 2) {
-            mark = " → ×";
-          }
-          
-          A_Days.push({ A: formatDate(A), A_plus_2: formatDate(A_plus_2), daysDifference, mark });
-          previousDaysDifference = daysDifference;
+            // 追加: 月の最終営業日の「カレンダー上の14日前」を求める
+            let fourteenDaysBeforeLast = new Date(lastBusinessDay);
+            fourteenDaysBeforeLast.setDate(fourteenDaysBeforeLast.getDate() - 14 + 1);
+
+            // 14日前が祝日の場合、翌営業日を取得
+            let adjustedFourteenDaysBeforeLast = fourteenDaysBeforeLast;
+            while (isWeekend(adjustedFourteenDaysBeforeLast) || isHoliday(adjustedFourteenDaysBeforeLast, holidays)) {
+                adjustedFourteenDaysBeforeLast = await getNthBusinessDayAfter(adjustedFourteenDaysBeforeLast, 1, holidays);
+            }
+
+            const A_start = twoBusinessDaysBefore;
+            const A_Days = [];
+            let previousDaysDifference = null;
+
+            for (let i = 1; i <= 10; i++) {
+                const A = await getNthBusinessDayBefore(oneBusinessDayBefore, i, holidays);
+                const A_plus_2 = await getNthBusinessDayAfter(A, 2, holidays);
+                const daysDifference = Math.abs(calculateDaysBetween(A_plus_2, B)) + 1;
+                let mark = "";
+
+                if (previousDaysDifference !== null && daysDifference - previousDaysDifference >= 2) {
+                    mark = " → ×";
+                }
+
+                A_Days.push({ A: formatDate(A), A_plus_2: formatDate(A_plus_2), daysDifference, mark });
+                previousDaysDifference = daysDifference;
+
+                if (i === 10) {
+                  //15営業日前を特別に追加
+                  const A = fifteenBusinessDaysBefore
+                  const A_plus_2 = await getNthBusinessDayAfter(A, 2, holidays);
+                  const daysDifference = Math.abs(calculateDaysBetween(A_plus_2, B)) + 1;
+                  let mark = "";
+
+                  A_Days.push({ A: formatDate(A), A_plus_2: formatDate(A_plus_2), daysDifference, mark });
+                  previousDaysDifference = daysDifference;
+                }
+            }
+
+            businessDaysList.push({
+                month: currentMonth.getMonth() + 1,
+                year: currentMonth.getFullYear(),
+                lastBusinessDay: formatDate(lastBusinessDay),
+                oneBusinessDayBefore: formatDate(oneBusinessDayBefore),
+                twoBusinessDaysBefore: formatDate(twoBusinessDaysBefore),
+                fifteenBusinessDaysBefore: formatDate(fifteenBusinessDaysBefore),
+                B: formatDate(B),
+                fourteenDaysBeforeLast: formatDate(fourteenDaysBeforeLast), // 14日前
+                adjustedFourteenDaysBeforeLast: formatDate(adjustedFourteenDaysBeforeLast), // 調整後（祝日考慮）
+                A_start: formatDate(A_start),
+                A_Days
+            });
         }
 
-        businessDaysList.push({
-          month: currentMonth.getMonth() + 1,
-          year: currentMonth.getFullYear(),
-          lastBusinessDay: formatDate(lastBusinessDay),
-          oneBusinessDayBefore: formatDate(oneBusinessDayBefore),
-          twoBusinessDaysBefore: formatDate(twoBusinessDaysBefore),
-          B: formatDate(B),
-          A_start: formatDate(A_start),
-          A_Days
-        });
-      }
-      
-      displayBusinessDays(businessDaysList);
+        displayBusinessDays(businessDaysList);
     }
 
-    async function fetchHolidays(year) {
+    async function fetchHolidays(years) {
       const response = await fetch(holidaysApiUrl);
       const holidays = await response.json();
-      return Object.keys(holidays).filter(date => new Date(date).getFullYear() === year);
+      return Object.keys(holidays).filter(date => years.includes(new Date(date).getFullYear()));
     }
 
     async function getNthBusinessDayBefore(date, n, holidays) {
@@ -176,26 +203,36 @@
     }
 
     function displayBusinessDays(businessDays) {
-    const listElement = document.getElementById('business-days-list');
-    listElement.innerHTML = "";
+        const listElement = document.getElementById('business-days-list');
+        listElement.innerHTML = "";
 
-    const inputValue = parseFloat(document.getElementById('inputValue').value) * 10000;
+        const inputValue = parseFloat(document.getElementById('inputValue').value) * 10000;
 
-    businessDays.forEach(item => {
-      const li = document.createElement('li');
-      let text = `<strong>${item.year}年${item.month}月</strong> <br> 最終購入日: ${item.A_start} / 売却可能日: ${item.oneBusinessDayBefore}<br>`;
+        businessDays.forEach(item => {
+            const li = document.createElement('li');
+            let text = `<strong>${item.year}年${item.month}月</strong> <br> 
+                最終購入日: ${item.A_start} / 売却可能日: ${item.oneBusinessDayBefore} <br>
+                <span style="color: blue;">SBI開始: ${item.fifteenBusinessDaysBefore}</span>  / 
+                      <span style="color: red;"> R開始: ${item.adjustedFourteenDaysBeforeLast}</span> <br>`; 
 
-      item.A_Days.forEach(AData => {
-        const calculatedValue = inputValue ? Math.floor(inputValue * 0.039 / 365 * AData.daysDifference) : "";
-        text += `購入日: ${AData.A} (${AData.daysDifference}日) ${calculatedValue ? `<span style="color: red;">${calculatedValue}円</span>` : ""}${AData.mark}<br>`;
-      });
+            item.A_Days.forEach((AData, index) => {
+                const calculatedValue = inputValue ? Math.floor(inputValue * 0.039 / 365 * AData.daysDifference) : "";
+                text += `購入日: ${AData.A} (${AData.daysDifference}日) ${calculatedValue ? ` -- ${calculatedValue}円` : ""}${AData.mark}<br>`;
 
-      const div = document.createElement('div'); // `pre` ではなく `div` にする
-      div.innerHTML = text.trim(); // `innerHTML` を適用
-      li.appendChild(div);
-      listElement.appendChild(li);
-    });
-}
+                // 最後の1つ前に <hr> を追加
+                if (index === item.A_Days.length - 2) {
+                    text += `<hr>`;
+                    text += `<strong><span style="color: blue;">SBI開始時点</span></strong>で参加した場合<br>`;
+                    text += `<hr>`;
+                }
+            });
+
+            const div = document.createElement('div');
+            div.innerHTML = text.trim();
+            li.appendChild(div);
+            listElement.appendChild(li);
+        });
+    }
 
     function updateDisplay() {
       getBusinessDaysForNext13Months();
