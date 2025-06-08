@@ -116,7 +116,7 @@
             const A_Days = [];
             let previousDaysDifference = null;
 
-            for (let i = 1; i <= 10; i++) {
+            for (let i = 1; i <= 14; i++) {
                 const A = await getNthBusinessDayBefore(oneBusinessDayBefore, i, holidays);
                 const A_plus_2 = await getNthBusinessDayAfter(A, 2, holidays);
                 const daysDifference = Math.abs(calculateDaysBetween(A_plus_2, B)) + 1;
@@ -129,7 +129,7 @@
                 A_Days.push({ A: formatDate(A), A_plus_2: formatDate(A_plus_2), daysDifference, mark });
                 previousDaysDifference = daysDifference;
 
-                if (i === 10) {
+                if (i === 14) {
                   //15営業日前を特別に追加(SBIフライングクロスのため)
                   const A = fifteenBusinessDaysBefore
                   const A_plus_2 = await getNthBusinessDayAfter(A, 2, holidays);
