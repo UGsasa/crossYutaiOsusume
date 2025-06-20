@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>貸株料の効率計算（SMBC日興証券)</title>
+  <title>貸株料の効率計算(SMBC日興証券)</title>
   <style>
     pre {
       white-space: pre-wrap; 
@@ -33,6 +33,10 @@
       gap: 5px; /* ラベルと入力欄の間隔を調整 */
       justify-content: center; /* センター揃え */
     }
+    .container{
+      display: flex;
+      justify-content: space-around;
+    }
 
     input {
       width: 80px; /* 数字の入力欄を適切なサイズに */
@@ -60,10 +64,13 @@
   </style>
 </head>
 <body>
-  <h2>貸株料の効率計算:SMBC日興</h2>
+  <h2>貸株料の効率:SMBC日興</h2>
   <p>※1 貸株料率は年利1.4%の前提で計算 </br> ※2 買い方に制度信用金利2.5％が1日分かかる </br> (金額には含み済）</p>
   <p>×のついた日の次の日にポジションを取るのが相対的には効率良い気がする。</p>
-  <a href="javascript:void(0);" onclick="OnLinkClick();">SBI/楽天に切替</a>
+  <div class="container">
+    <a href="javascript:void(0);" onclick="OnLinkClick(0);">SBI/楽天(短期)に切替</a>
+    <a href="javascript:void(0);" onclick="OnLinkClick(2);"><font color="#BF0000">楽天(長期)に切替</font></a>
+  </div>
   <div class="input-container">
     <label for="inputValue">金額:</label>
     <input type="number" id="inputValue" value="20" oninput="updateDisplay() " onfocus="this.select();">
@@ -247,11 +254,18 @@
       getBusinessDaysForNext13Months();
     }
 
-    function OnLinkClick() {
+    function OnLinkClick(type) {
       let sampleParams = new URLSearchParams();
       let element = document.getElementById('inputValue');
       sampleParams.set("inputValue", element.value);
-      let url = `./index.html?${sampleParams.toString()}`;
+      let url = "";
+      if (type === 0) {
+        url = `./index.html?${sampleParams.toString()}`;
+      } else if (type === 1) {
+        url = `./forSmbc.html?${sampleParams.toString()}`;
+      } else {
+        url = `./forRakutenMukigen.html?${sampleParams.toString()}`;
+      }    
       window.location.href = url;
       return false;
     }
