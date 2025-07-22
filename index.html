@@ -231,7 +231,7 @@
         businessDays.forEach(item => {
             const li = document.createElement('li');
             let text = `<strong>${item.year}年${item.month}月</strong> <br> 
-                最終購入日: ${item.A_start} / 売却可能日: ${item.oneBusinessDayBefore} <br>
+                最終購入: ${item.A_start} / 売却可: ${item.oneBusinessDayBefore} <br>
                 <span style="color: blue;">SBI開始: ${item.fifteenBusinessDaysBefore}</span>  / 
                       <span style="color: red;"> R開始: ${item.adjustedFourteenDaysBeforeLast}</span> <br>`; 
 
