@@ -166,6 +166,14 @@
                 i++;
             }
 
+            // 最後に今日のデータも追加
+            A_Days.push({
+                A: formatDate(today),
+                A_plus_2: formatDate(today_plus_2),
+                daysDifference: today_daysDifference,
+                mark: "（本日）"
+            });
+
             businessDaysList.push({
                 month: currentMonth.getMonth() + 1,
                 year: currentMonth.getFullYear(),
