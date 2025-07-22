@@ -61,11 +61,24 @@
       white-space: nowrap;
       overflow-x: auto;
     }
+    #business-days-list li {
+      margin-bottom: 15px;
+      list-style: none;
+    }
+
+    #business-days-list li div {
+      max-height: 400px; /* 表示する最大高さを指定（必要に応じて調整） */
+      overflow-y: auto;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background-color: #f9f9f9;
+    }
   </style>
 </head>
 <body>
   <h2>貸株料の効率:SMBC日興</h2>
-  <p>※1 貸株料率は年利1.4%の前提で計算 </br> ※2 買い方に制度信用金利2.5％が1日分かかる </br> (金額には含み済）</p>
+  <p>※1 貸株料率は年利1.4%の前提で計算 </br> ※2 買い方に制度信用金利2.5％が1日分かかる </br> (金額には含み済)</p>
   <p>×のついた日の次の日にポジションを取るのが相対的には効率良い気がする。</p>
   <div class="container">
     <a href="javascript:void(0);" onclick="OnLinkClick(0);">SBI/楽天(短期)に切替</a>
@@ -121,11 +134,19 @@
             }
 
             const A_start = twoBusinessDaysBefore;
+            today.setHours(0, 0, 0, 0);
+            const today_plus_1 = await getNthBusinessDayBefore(today, -1, holidays);
+
             const A_Days = [];
             let previousDaysDifference = null;
+            let i = 1;
 
-            for (let i = 1; i <= 10; i++) {
+            while (true) {
                 const A = await getNthBusinessDayBefore(oneBusinessDayBefore, i, holidays);
+
+                // 今日の2営業日前より前なら終了
+                if (A < today_plus_1) break;
+
                 const A_plus_2 = await getNthBusinessDayAfter(A, 2, holidays);
                 const daysDifference = Math.abs(calculateDaysBetween(A_plus_2, B)) + 1;
                 let mark = "";
@@ -134,18 +155,24 @@
                     mark = " → ×";
                 }
 
-                A_Days.push({ A: formatDate(A), A_plus_2: formatDate(A_plus_2), daysDifference, mark });
-                previousDaysDifference = daysDifference;
+                A_Days.push({
+                    A: formatDate(A),
+                    A_plus_2: formatDate(A_plus_2),
+                    daysDifference,
+                    mark
+                });
 
-                if (i === 10) {
-                  A_Days.push({
-                    A: formatDate(today),
-                    A_plus_2: formatDate(today_plus_2),
-                    daysDifference: today_daysDifference,
-                    mark: "（本日）"
-                  });
-                }
+                previousDaysDifference = daysDifference;
+                i++;
             }
+
+            // 最後に今日のデータも追加
+            A_Days.push({
+                A: formatDate(today),
+                A_plus_2: formatDate(today_plus_2),
+                daysDifference: today_daysDifference,
+                mark: "（本日）"
+            });
 
             businessDaysList.push({
                 month: currentMonth.getMonth() + 1,
