@@ -255,11 +255,12 @@
 
         businessDays.forEach(item => {
             const li = document.createElement('li');
+            const calculatedValueKai = Math.floor(inputValue * 0.025 / 365 * 1)
             let text = `<strong>${item.year}年${item.month}月</strong> <br> 
-                最終購入: ${item.A_start} / 売却可: ${item.oneBusinessDayBefore} <br>`; 
+                最終購入: ${item.A_start} / 売却可: ${item.oneBusinessDayBefore} / 制度信用買金利：${calculatedValueKai}円<br>`; 
 
             item.A_Days.forEach((AData, index) => {
-                const calculatedValue = inputValue ? Math.floor(inputValue * 0.014 / 365 * AData.daysDifference + inputValue * 0.025 / 365 * 1) : "";
+                const calculatedValue = inputValue ? Math.floor(inputValue * 0.025 / 365 * 1 + inputValue * 0.014 / 365 * AData.daysDifference) : "";
                 text += `購入日: ${AData.A} (${AData.daysDifference}日) ${calculatedValue ? ` -- ${calculatedValue}円` : ""}${AData.mark}<br>`;
 
                 // 最後の1つ前に <hr> を追加
@@ -301,3 +302,4 @@
   </script>
 </body>
 </html>
+
