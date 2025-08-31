@@ -78,7 +78,7 @@
 </head>
 <body>
   <h2>貸株料の効率:SMBC日興</h2>
-  <p>※1 貸株料率は年利1.4%の前提で計算 </br> ※2 買い方に制度信用金利2.5％が1日分かかる </br> (金額には含み済)</p>
+  <p>※1 貸株料率は年利1.4%の前提で計算 </br> ※2 買い方に制度信用金利2.5％が1日分<span id="oneDayCost">(0円)</span>かかる(金額には含み済)</p>
   <p>×のついた日の次の日にポジションを取るのが相対的には効率良い気がする。</p>
   <div class="container">
     <a href="javascript:void(0);" onclick="OnLinkClick(0);">SBI/楽天(短期)に切替</a>
@@ -249,15 +249,22 @@
 
     function displayBusinessDays(businessDays) {
         const listElement = document.getElementById('business-days-list');
+        const span = document.getElementById("oneDayCost");
         listElement.innerHTML = "";
 
         const inputValue = parseFloat(document.getElementById('inputValue').value) * 10000;
+        if (inputValue && !isNaN(inputValue)) {
+          const inputValueKai = Math.floor(inputValue * 0.025 / 365 * 1)
+          span.textContent = `(${inputValueKai}円)`;
+        } else {
+          span.textContent = ""; // 入力が空なら非表示
+        }
+
 
         businessDays.forEach(item => {
             const li = document.createElement('li');
-            const calculatedValueKai = Math.floor(inputValue * 0.025 / 365 * 1)
             let text = `<strong>${item.year}年${item.month}月</strong> <br> 
-                最終購入: ${item.A_start} / 売却可: ${item.oneBusinessDayBefore} / 制度信用買金利：${calculatedValueKai}円<br>`; 
+                最終購入: ${item.A_start} / 売却可: ${item.oneBusinessDayBefore} <br>`; 
 
             item.A_Days.forEach((AData, index) => {
                 const calculatedValue = inputValue ? Math.floor(inputValue * 0.025 / 365 * 1 + inputValue * 0.014 / 365 * AData.daysDifference) : "";
