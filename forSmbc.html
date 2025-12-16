@@ -78,7 +78,7 @@
 </head>
 <body>
   <h2>貸株料の効率:SMBC日興</h2>
-  <p>※1 貸株料率は年利1.4%の前提で計算 </br> ※2 買い方に制度信用金利2.5％が1日分<span id="oneDayCost">(0円)</span>かかる(金額には含み済)</p>
+  <p>※1 貸株料率は年利1.7%の前提で計算 </br> ※2 買い方に制度信用金利2.97％が1日分<span id="oneDayCost">(0円)</span>かかる(金額には含み済)</p>
   <p>×のついた日の次の日にポジションを取るのが相対的には効率良い気がする。</p>
   <div class="container">
     <a href="javascript:void(0);" onclick="OnLinkClick(0);">SBI/楽天(短期)に切替</a>
@@ -267,7 +267,7 @@
                 最終購入: ${item.A_start} / 売却可: ${item.oneBusinessDayBefore} <br>`; 
 
             item.A_Days.forEach((AData, index) => {
-                const calculatedValue = inputValue ? Math.floor(inputValue * 0.025 / 365 * 1 + inputValue * 0.014 / 365 * AData.daysDifference) : "";
+                const calculatedValue = inputValue ? Math.floor(inputValue * 0.0297 / 365 * 1 + inputValue * 0.017 / 365 * AData.daysDifference) : "";
                 text += `購入日: ${AData.A} (${AData.daysDifference}日) ${calculatedValue ? ` -- ${calculatedValue}円` : ""}${AData.mark}<br>`;
 
                 // 最後の1つ前に <hr> を追加
