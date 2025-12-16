@@ -254,7 +254,7 @@
 
         const inputValue = parseFloat(document.getElementById('inputValue').value) * 10000;
         if (inputValue && !isNaN(inputValue)) {
-          const inputValueKai = Math.floor(inputValue * 0.025 / 365 * 1)
+          const inputValueKai = Math.floor(inputValue * 0.0297 / 365 * 1)
           span.textContent = `(${inputValueKai}円)`;
         } else {
           span.textContent = ""; // 入力が空なら非表示
@@ -309,4 +309,5 @@
   </script>
 </body>
 </html>
+
 
