@@ -13,8 +13,8 @@
       font-family: Arial, sans-serif;
       margin: 0;
       padding: 10px;
-      max-width: 600px; /* スマホでも適切な幅に */
-      margin: auto; /* 水平中央揃え */
+      max-width: 600px;
+      margin: auto;
     }
 
     h1 {
@@ -30,8 +30,8 @@
     .input-container {
       display: flex;
       align-items: center;
-      gap: 5px; /* ラベルと入力欄の間隔を調整 */
-      justify-content: center; /* センター揃え */
+      gap: 5px;
+      justify-content: center;
     }
     .container{
       display: flex;
@@ -39,7 +39,7 @@
     }
 
     input {
-      width: 80px; /* 数字の入力欄を適切なサイズに */
+      width: 80px;
       text-align: right;
       padding: 5px;
       font-size: 1em;
@@ -67,7 +67,7 @@
     }
 
     #business-days-list li div {
-      max-height: 400px; /* 表示する最大高さを指定（必要に応じて調整） */
+      max-height: 400px;
       overflow-y: auto;
       padding: 8px;
       border: 1px solid #ccc;
@@ -87,7 +87,7 @@
   </div>
   <div class="input-container">
     <label for="inputValue">金額:</label>
-    <input type="number" id="inputValue" value="20" oninput="updateDisplay() " onfocus="this.select();">
+    <input type="number" id="inputValue" value="20" oninput="updateDisplay()" onfocus="this.select();">
     <label for="inputValue">万円</label>
   </div>
   <ul id="business-days-list"></ul>
@@ -111,6 +111,9 @@
         const kijyuntoday = new Date();
         kijyuntoday.setHours(0, 0, 0, 0);
 
+        // ★追加
+        const effectiveToday = await getEffectiveToday(holidays);
+
         for (let monthOffset = 0; monthOffset < 6; monthOffset++) {
             const currentMonth = new Date(kijyuntoday);
             currentMonth.setDate(1);
@@ -120,23 +123,25 @@
             const oneBusinessDayBefore = await getNthBusinessDayBefore(lastBusinessDay, 1, holidays);
             const twoBusinessDaysBefore = await getNthBusinessDayBefore(lastBusinessDay, 2, holidays);
             const B = await getNthBusinessDayAfter(oneBusinessDayBefore, 2, holidays);
+
             const today = new Date();
-            const today_plus_2 = await getNthBusinessDayAfter(today, 2, holidays);
+            const today_plus_2 = await getNthBusinessDayAfter(effectiveToday, 2, holidays); // ★変更
             const today_daysDifference = Math.abs(calculateDaysBetween(today_plus_2, B)) + 1;
 
-            // 追加: 月の最終営業日の「カレンダー上の14日前」を求める
             let fourteenDaysBeforeLast = new Date(lastBusinessDay);
             fourteenDaysBeforeLast.setDate(fourteenDaysBeforeLast.getDate() - 14 + 1);
 
-            // 14日前が祝日の場合、翌営業日を取得
             let adjustedFourteenDaysBeforeLast = fourteenDaysBeforeLast;
             while (isWeekend(adjustedFourteenDaysBeforeLast) || isHoliday(adjustedFourteenDaysBeforeLast, holidays)) {
                 adjustedFourteenDaysBeforeLast = await getNthBusinessDayAfter(adjustedFourteenDaysBeforeLast, 1, holidays);
             }
 
             const A_start = twoBusinessDaysBefore;
-            today.setHours(0, 0, 0, 0);
-            const today_plus_1 = await getNthBusinessDayBefore(today, -1, holidays);
+
+            const today_base = new Date(effectiveToday); // ★変更
+            today_base.setHours(0,0,0,0);
+
+            const today_plus_1 = await getNthBusinessDayBefore(today_base, -1, holidays);
 
             const A_Days = [];
             let previousDaysDifference = null;
@@ -145,7 +150,6 @@
             while (true) {
                 const A = await getNthBusinessDayBefore(oneBusinessDayBefore, i, holidays);
 
-                // 今日の2営業日前より前なら終了
                 if (A < today_plus_1) break;
 
                 const A_plus_2 = await getNthBusinessDayAfter(A, 2, holidays);
@@ -167,9 +171,9 @@
                 i++;
             }
 
-            // 最後に今日のデータも追加
+            // ★変更（本日 → 営業日ベース）
             A_Days.push({
-                A: formatDate(today),
+                A: formatDate(effectiveToday),
                 A_plus_2: formatDate(today_plus_2),
                 daysDifference: today_daysDifference,
                 mark: "（本日）"
@@ -182,14 +186,15 @@
                 oneBusinessDayBefore: formatDate(oneBusinessDayBefore),
                 twoBusinessDaysBefore: formatDate(twoBusinessDaysBefore),
                 B: formatDate(B),
-                fourteenDaysBeforeLast: formatDate(fourteenDaysBeforeLast), // 14日前
-                adjustedFourteenDaysBeforeLast: formatDate(adjustedFourteenDaysBeforeLast), // 調整後（祝日考慮）
+                fourteenDaysBeforeLast: formatDate(fourteenDaysBeforeLast),
+                adjustedFourteenDaysBeforeLast: formatDate(adjustedFourteenDaysBeforeLast),
                 A_start: formatDate(A_start),
                 A_Days
             });
         }
 
-        displayBusinessDays(businessDaysList);
+        // ★変更
+        await displayBusinessDays(businessDaysList, holidays);
     }
 
     async function fetchHolidays(years) {
@@ -248,19 +253,36 @@
       return Math.floor((dateA - dateB) / (1000 * 60 * 60 * 24));
     }
 
-    function displayBusinessDays(businessDays) {
+    // ★追加
+    async function getEffectiveToday(holidays) {
+      const now = new Date();
+      let today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+
+      if (now.getHours() > 15 || (now.getHours() === 15 && now.getMinutes() >= 30)) {
+        today = await getNthBusinessDayAfter(today, 1, holidays);
+      }
+
+      return today;
+    }
+
+    // ★変更
+    async function displayBusinessDays(businessDays, holidays) {
         const listElement = document.getElementById('business-days-list');
         const span = document.getElementById("oneDayCost");
         listElement.innerHTML = "";
 
         const inputValue = parseFloat(document.getElementById('inputValue').value) * 10000;
+
         if (inputValue && !isNaN(inputValue)) {
           const inputValueKai = Math.floor(inputValue * 0.0327 / 365 * 1)
           span.textContent = `(${inputValueKai}円)`;
         } else {
-          span.textContent = ""; // 入力が空なら非表示
+          span.textContent = "";
         }
 
+        const effectiveToday = await getEffectiveToday(holidays); // ★追加
+        const effectiveTodayStr = formatDate(effectiveToday);
 
         businessDays.forEach(item => {
             const li = document.createElement('li');
@@ -269,9 +291,15 @@
 
             item.A_Days.forEach((AData, index) => {
                 const calculatedValue = inputValue ? Math.floor(inputValue * 0.0327 / 365 * 1 + inputValue * 0.019 / 365 * AData.daysDifference) : "";
-                text += `購入日: ${AData.A} (${AData.daysDifference}日) ${calculatedValue ? ` -- ${calculatedValue}円` : ""}${AData.mark}<br>`;
 
-                // 最後の1つ前に <hr> を追加
+                // ★追加（赤）
+                let displayDate = AData.A;
+                if (AData.A === effectiveTodayStr) {
+                    displayDate = `<span style="color:red; font-weight:bold;">${AData.A}</span>`;
+                }
+
+                text += `購入日: ${displayDate} (${AData.daysDifference}日) ${calculatedValue ? ` -- ${calculatedValue}円` : ""}${AData.mark}<br>`;
+
                 if (index === item.A_Days.length - 2) {
                     text += `<hr>`;
                     text += `<strong><span>今日</span></strong> 参加した場合<br>`;
@@ -310,5 +338,3 @@
   </script>
 </body>
 </html>
-
-
