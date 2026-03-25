@@ -111,7 +111,11 @@
         const kijyuntoday = new Date();
         kijyuntoday.setHours(0, 0, 0, 0);
 
-        // ★追加
+        // ★追加：15:30に関係なく、純粋なカレンダー上の今日
+        const calendarToday = new Date();
+        calendarToday.setHours(0, 0, 0, 0);
+
+        // 営業日基準の今日（15:30以降は翌営業日）
         const effectiveToday = await getEffectiveToday(holidays);
 
         for (let monthOffset = 0; monthOffset < 6; monthOffset++) {
@@ -124,25 +128,12 @@
             const twoBusinessDaysBefore = await getNthBusinessDayBefore(lastBusinessDay, 2, holidays);
             const B = await getNthBusinessDayAfter(oneBusinessDayBefore, 2, holidays);
 
-            const today = new Date();
-            const today_plus_2 = await getNthBusinessDayAfter(effectiveToday, 2, holidays); // ★変更
+            const today_plus_2 = await getNthBusinessDayAfter(effectiveToday, 2, holidays);
             const today_daysDifference = Math.abs(calculateDaysBetween(today_plus_2, B)) + 1;
-
-            let fourteenDaysBeforeLast = new Date(lastBusinessDay);
-            fourteenDaysBeforeLast.setDate(fourteenDaysBeforeLast.getDate() - 14 + 1);
-
-            let adjustedFourteenDaysBeforeLast = fourteenDaysBeforeLast;
-            while (isWeekend(adjustedFourteenDaysBeforeLast) || isHoliday(adjustedFourteenDaysBeforeLast, holidays)) {
-                adjustedFourteenDaysBeforeLast = await getNthBusinessDayAfter(adjustedFourteenDaysBeforeLast, 1, holidays);
-            }
 
             const A_start = twoBusinessDaysBefore;
 
-            const today_base = new Date(effectiveToday); // ★変更
-            today_base.setHours(0,0,0,0);
-
-            const today_plus_1 = await getNthBusinessDayBefore(today_base, -1, holidays);
-
+            // リスト作成のためのループ
             const A_Days = [];
             let previousDaysDifference = null;
             let i = 1;
@@ -150,7 +141,8 @@
             while (true) {
                 const A = await getNthBusinessDayBefore(oneBusinessDayBefore, i, holidays);
 
-                if (A < today_plus_1) break;
+                // ★修正：判定を calendarToday に変更することで、15:30を過ぎても今日の日付が消えなくなります
+                if (A < calendarToday) break;
 
                 const A_plus_2 = await getNthBusinessDayAfter(A, 2, holidays);
                 const daysDifference = Math.abs(calculateDaysBetween(A_plus_2, B)) + 1;
@@ -171,7 +163,7 @@
                 i++;
             }
 
-            // ★変更（本日 → 営業日ベース）
+            // 「今日参加した場合」の表示用データ
             A_Days.push({
                 A: formatDate(effectiveToday),
                 A_plus_2: formatDate(today_plus_2),
@@ -186,14 +178,11 @@
                 oneBusinessDayBefore: formatDate(oneBusinessDayBefore),
                 twoBusinessDaysBefore: formatDate(twoBusinessDaysBefore),
                 B: formatDate(B),
-                fourteenDaysBeforeLast: formatDate(fourteenDaysBeforeLast),
-                adjustedFourteenDaysBeforeLast: formatDate(adjustedFourteenDaysBeforeLast),
                 A_start: formatDate(A_start),
                 A_Days
             });
         }
 
-        // ★変更
         await displayBusinessDays(businessDaysList, holidays);
     }
 
@@ -302,7 +291,7 @@
 
                 if (index === item.A_Days.length - 2) {
                     text += `<hr>`;
-                    text += `<strong><span>今日</span></strong> 参加した場合<br>`;
+                    text += `<strong><span>今</span></strong> から参加した場合<br>`;
                     text += `<hr>`;
                 }
             });

@@ -111,7 +111,11 @@
         const kijyuntoday = new Date();
         kijyuntoday.setHours(0, 0, 0, 0);
 
-        // ★追加：営業日基準の今日
+        // ★追加：15:30に関係なく、純粋な「今日」の日付
+        const calendarToday = new Date();
+        calendarToday.setHours(0, 0, 0, 0);
+
+        // 営業日基準の今日（15:30以降は翌営業日）
         const effectiveToday = await getEffectiveToday(holidays);
 
         for (let monthOffset = 0; monthOffset < 6; monthOffset++) {
@@ -121,10 +125,8 @@
 
             const lastBusinessDay = await getLastBusinessDayOfMonth(currentMonth.getFullYear(), currentMonth.getMonth(), holidays);
             const oneBusinessDayBefore = await getNthBusinessDayBefore(lastBusinessDay, 1, holidays);
-            const twoBusinessDaysBefore = await getNthBusinessDayBefore(lastBusinessDay, 2, holidays);
             const B = await getNthBusinessDayAfter(oneBusinessDayBefore, 2, holidays);
 
-            // ★修正：today → effectiveToday
             const today_plus_2 = await getNthBusinessDayAfter(effectiveToday, 2, holidays);
             const today_daysDifference = Math.abs(calculateDaysBetween(today_plus_2, B)) + 1;
 
@@ -137,9 +139,7 @@
             }
 
             const rakutenLastDay = await getNthBusinessDayBefore(adjustedFourteenDaysBeforeLast, 1, holidays);
-
-            const A_start = twoBusinessDaysBefore;
-            const today_plus_1 = await getNthBusinessDayBefore(effectiveToday, -1, holidays);
+            const A_start = await getNthBusinessDayBefore(lastBusinessDay, 2, holidays); // ここ修正しました
 
             const A_Days = [];
             let previousDaysDifference = null;
@@ -148,7 +148,8 @@
             while (true) {
                 const A = await getNthBusinessDayBefore(oneBusinessDayBefore, i, holidays);
 
-                if (A < today_plus_1) break;
+                // ★修正：判定を effectiveToday ではなく calendarToday に変更
+                if (A < calendarToday) break;
 
                 if (A >= adjustedFourteenDaysBeforeLast) {
                     i++;
@@ -174,7 +175,6 @@
                 i++;
             }
 
-            // ★本日も営業日ベース
             if (A_Days.length > 0) {
                 A_Days.push({
                     A: formatDate(effectiveToday),
@@ -187,14 +187,9 @@
             businessDaysList.push({
                 month: currentMonth.getMonth() + 1,
                 year: currentMonth.getFullYear(),
-                lastBusinessDay: formatDate(lastBusinessDay),
-                oneBusinessDayBefore: formatDate(oneBusinessDayBefore),
-                twoBusinessDaysBefore: formatDate(twoBusinessDaysBefore),
-                B: formatDate(B),
-                fourteenDaysBeforeLast: formatDate(fourteenDaysBeforeLast),
-                adjustedFourteenDaysBeforeLast: formatDate(adjustedFourteenDaysBeforeLast),
                 rakutenLastDay: formatDate(rakutenLastDay),
                 A_start: formatDate(A_start),
+                oneBusinessDayBefore: formatDate(oneBusinessDayBefore),
                 A_Days
             });
         }
@@ -245,7 +240,7 @@
 
                 if (index === item.A_Days.length - 2) {
                     text += `<hr>`;
-                    text += `<strong><span>今日</span></strong> 参加した場合<br>`;
+                    text += `<strong><span>今</span></strong> から参加した場合<br>`;
                     text += `<hr>`;
                 }
             });
