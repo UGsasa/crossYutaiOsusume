@@ -4,6 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>貸株料の効率計算(SMBC日興証券)</title>
+  <link rel="manifest" href="./manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="貸株料計算">
+  <link rel="apple-touch-icon" href="./icon-192.png">
   <style>
     pre {
       white-space: pre-wrap; 
@@ -324,6 +329,14 @@
     }
 
     getBusinessDaysForNext13Months();
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('Service Worker registered', reg))
+          .catch(err => console.log('Service Worker registration failed', err));
+      });
+    }
   </script>
 </body>
 </html>
