@@ -82,10 +82,6 @@
     <input type="number" id="inputValue" value="20" oninput="updateDisplay()" onfocus="this.select();">
     <label for="inputValue">万円</label>
   </div>
-  <div style="margin: 12px 0; text-align: center;">
-    <button id="enablePushBtn" type="button">プッシュ通知を有効化</button>
-    <pre id="pushStatus" style="margin-top: 8px; text-align: left; white-space: pre-wrap;"></pre>
-  </div>
   <ul id="business-days-list"></ul>
 
   <script>
@@ -314,74 +310,6 @@
           .catch(err => console.log('Service Worker registration failed', err));
       });
     }
-  </script>
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-    import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyDIffJd1bHcorSXkUr9KGhupYp2rYEqUF0",
-      authDomain: "pwa-push-test1.firebaseapp.com",
-      projectId: "pwa-push-test1",
-      storageBucket: "pwa-push-test1.firebasestorage.app",
-      messagingSenderId: "333066203235",
-      appId: "1:333066203235:web:5974b18f7ca3bd99ef4856"
-    };
-
-    const vapidKey = "BA2P9zcc2ucGvDcCKw571JguTsfKGGQW499BV9re4g1W3GCBIgvynSLM6zpdm4MZyO6yUSe5LJJbDLcUUwCxu6E";
-
-    const app = initializeApp(firebaseConfig);
-    const messaging = getMessaging(app);
-    const statusEl = document.getElementById("pushStatus");
-    const enablePushBtn = document.getElementById("enablePushBtn");
-
-    function setPushStatus(message) {
-      if (statusEl) {
-        statusEl.textContent = message;
-      }
-    }
-
-    enablePushBtn?.addEventListener("click", async () => {
-      try {
-        if (!("Notification" in window)) {
-          setPushStatus("この端末/ブラウザでは Notification API が使えません。");
-          return;
-        }
-
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") {
-          setPushStatus("通知が許可されませんでした。");
-          return;
-        }
-
-        if (!("serviceWorker" in navigator)) {
-          setPushStatus("Service Worker が使えません。");
-          return;
-        }
-
-        const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js");
-        const token = await getToken(messaging, {
-          vapidKey,
-          serviceWorkerRegistration: registration
-        });
-
-        if (!token) {
-          setPushStatus("FCMトークンを取得できませんでした。");
-          return;
-        }
-
-        setPushStatus(`FCMトークンを取得しました。\n\n${token}`);
-        console.log("FCM token:", token);
-      } catch (error) {
-        console.error(error);
-        setPushStatus(`通知初期化でエラーが発生しました。\n${error?.message || error}`);
-      }
-    });
-
-    onMessage(messaging, (payload) => {
-      console.log("Foreground message:", payload);
-      setPushStatus(`フォアグラウンド受信:\n${JSON.stringify(payload, null, 2)}`);
-    });
   </script>
 </body>
 </html>
