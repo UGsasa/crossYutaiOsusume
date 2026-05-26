@@ -92,6 +92,13 @@
   </div>
   <ul id="business-days-list"></ul>
 
+  <!-- プッシュ通知設定パネル -->
+  <div id="pushPanel" class="push-panel hidden" style="margin-top: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 8px; background: #f0f8ff; text-align: center;">
+    <h3 style="margin-top: 0;">プッシュ通知設定</h3>
+    <p id="pushStatus" style="font-size: 0.9em; color: #333;">読み込み中...</p>
+    <button id="enablePushBtn" style="padding: 10px 20px; font-size: 1em; cursor: pointer; background-color: #007aff; color: white; border: none; border-radius: 5px;">通知を有効化する</button>
+  </div>
+
   <script>
     let myurl = new URL(window.location.href);
     let params = myurl.searchParams;
@@ -103,6 +110,8 @@
     const workerUrl = "YOUR_CLOUDFLARE_WORKER_URL";
     const vapidPublicKey = "YOUR_VAPID_PUBLIC_KEY";
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    
+    // DOM要素の取得はHTMLロード後に確実に行うため、ここで再度行います
     const pushPanel = document.getElementById('pushPanel');
     const statusEl = document.getElementById('pushStatus');
     const enablePushBtn = document.getElementById('enablePushBtn');
@@ -140,6 +149,10 @@
         }
 
         const registration = await navigator.serviceWorker.register('./sw.js');
+        
+        // すでに登録されている場合はreadyを待つ
+        await navigator.serviceWorker.ready;
+
         const subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
@@ -148,7 +161,8 @@
         setPushStatus(`PushSubscription を取得しました。\n\n${JSON.stringify(payload, null, 2)}`);
 
         if (workerUrl && !workerUrl.includes('YOUR_CLOUDFLARE_WORKER_URL')) {
-          const res = await fetch(workerUrl.replace(/\/$/, '') + '/subscribe', {
+          // Cloudflare Workerのルートへ直接POSTします
+          const res = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
