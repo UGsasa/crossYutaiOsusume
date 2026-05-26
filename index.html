@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>貸株料の効率計算</title>
+  <title>crossYutaiOsusume</title>
   <link rel="manifest" href="./manifest.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="貸株料計算">
+  <meta name="apple-mobile-web-app-title" content="crossYutaiOsusume">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <style>
     pre {
-      white-space: pre-wrap; 
+      white-space: pre-wrap;
       word-wrap: break-word;
     }
     body {
@@ -21,52 +21,56 @@
       max-width: 600px;
       margin: auto;
     }
-
     h1 {
       font-size: 1.5em;
       text-align: center;
     }
-
     label {
       display: block;
       margin: 10px 0 5px;
     }
-
     .input-container {
       display: flex;
       align-items: center;
       gap: 5px;
       justify-content: center;
     }
-    .container{
+    .container {
       display: flex;
       justify-content: space-around;
     }
-
     input {
       width: 80px;
       text-align: right;
       padding: 5px;
       font-size: 1em;
     }
-
     ul {
       padding: 0;
       list-style: none;
     }
-
     li {
       background: #f9f9f9;
       padding: 10px;
       margin: 5px 0;
       border-radius: 5px;
     }
-
     div {
       white-space: nowrap;
       overflow-x: auto;
     }
-
+    #business-days-list li {
+      margin-bottom: 15px;
+      list-style: none;
+    }
+    #business-days-list li div {
+      max-height: 400px;
+      overflow-y: auto;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background-color: #f9f9f9;
+    }
     .push-panel.hidden {
       display: none;
     }
@@ -86,104 +90,141 @@
     <input type="number" id="inputValue" value="20" oninput="updateDisplay()" onfocus="this.select();">
     <label for="inputValue">万円</label>
   </div>
-  <div id="pushPanel" class="push-panel hidden" style="margin: 12px 0; text-align: center;">
-    <button id="enablePushBtn" type="button">プッシュ通知を有効化</button>
-    <pre id="pushStatus" style="margin-top: 8px; text-align: left; white-space: pre-wrap;"></pre>
-  </div>
-  <script>
-    const isStandalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      window.navigator.standalone === true;
-    const pushPanel = document.getElementById('pushPanel');
-    if (pushPanel) {
-      pushPanel.classList.toggle('hidden', !isStandalone);
-    }
-  </script>
   <ul id="business-days-list"></ul>
 
   <script>
     let myurl = new URL(window.location.href);
     let params = myurl.searchParams;
-    value = params.get('inputValue')
-    if (!value){
-      value = 20
-    }
-
+    let value = params.get('inputValue');
+    if (!value) value = 20;
     document.getElementById('inputValue').value = value;
 
     const holidaysApiUrl = "https://holidays-jp.github.io/api/v1/date.json";
+    const workerUrl = "YOUR_CLOUDFLARE_WORKER_URL";
+    const vapidPublicKey = "YOUR_VAPID_PUBLIC_KEY";
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    const pushPanel = document.getElementById('pushPanel');
+    const statusEl = document.getElementById('pushStatus');
+    const enablePushBtn = document.getElementById('enablePushBtn');
 
-    async function getBusinessDaysForNext13Months() {
-        const currentYear = new Date().getFullYear();
-        const holidays = await fetchHolidays([currentYear, currentYear + 1]);
-        const businessDaysList = [];
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+    if (pushPanel) pushPanel.classList.toggle('hidden', !isStandalone);
+    if (isStandalone && statusEl) statusEl.textContent = 'PWA起動を確認しました。';
 
-        for (let monthOffset = 0; monthOffset < 6; monthOffset++) {
-            const currentMonth = new Date(today);
-            currentMonth.setDate(1);
-            currentMonth.setMonth(currentMonth.getMonth() + monthOffset);
+    function setPushStatus(message) {
+      if (statusEl) statusEl.textContent = message;
+    }
 
-            const lastBusinessDay = await getLastBusinessDayOfMonth(currentMonth.getFullYear(), currentMonth.getMonth(), holidays);
-            const oneBusinessDayBefore = await getNthBusinessDayBefore(lastBusinessDay, 1, holidays);
-            const twoBusinessDaysBefore = await getNthBusinessDayBefore(lastBusinessDay, 2, holidays);
-            const fifteenBusinessDaysBefore = await getNthBusinessDayBefore(oneBusinessDayBefore, 15, holidays);
-            const B = await getNthBusinessDayAfter(oneBusinessDayBefore, 2, holidays);
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+      return outputArray;
+    }
 
-            let fourteenDaysBeforeLast = new Date(lastBusinessDay);
-            fourteenDaysBeforeLast.setDate(fourteenDaysBeforeLast.getDate() - 14 + 1);
-
-            let adjustedFourteenDaysBeforeLast = fourteenDaysBeforeLast;
-            while (isWeekend(adjustedFourteenDaysBeforeLast) || isHoliday(adjustedFourteenDaysBeforeLast, holidays)) {
-                adjustedFourteenDaysBeforeLast = await getNthBusinessDayAfter(adjustedFourteenDaysBeforeLast, 1, holidays);
-            }
-
-            const A_start = twoBusinessDaysBefore;
-            const A_Days = [];
-            let previousDaysDifference = null;
-
-            for (let i = 1; i <= 14; i++) {
-                const A = await getNthBusinessDayBefore(oneBusinessDayBefore, i, holidays);
-                const A_plus_2 = await getNthBusinessDayAfter(A, 2, holidays);
-                const daysDifference = Math.abs(calculateDaysBetween(A_plus_2, B)) + 1;
-                let mark = "";
-
-                if (previousDaysDifference !== null && daysDifference - previousDaysDifference >= 2) {
-                    mark = " → ×";
-                }
-
-                A_Days.push({ A: formatDate(A), A_plus_2: formatDate(A_plus_2), daysDifference, mark });
-                previousDaysDifference = daysDifference;
-
-                if (i === 14) {
-                  const A = fifteenBusinessDaysBefore
-                  const A_plus_2 = await getNthBusinessDayAfter(A, 2, holidays);
-                  const daysDifference = Math.abs(calculateDaysBetween(A_plus_2, B)) + 1;
-                  let mark = "";
-
-                  A_Days.push({ A: formatDate(A), A_plus_2: formatDate(A_plus_2), daysDifference, mark });
-                  previousDaysDifference = daysDifference;
-                }
-            }
-
-            businessDaysList.push({
-                month: currentMonth.getMonth() + 1,
-                year: currentMonth.getFullYear(),
-                lastBusinessDay: formatDate(lastBusinessDay),
-                oneBusinessDayBefore: formatDate(oneBusinessDayBefore),
-                twoBusinessDaysBefore: formatDate(twoBusinessDaysBefore),
-                fifteenBusinessDaysBefore: formatDate(fifteenBusinessDaysBefore),
-                B: formatDate(B),
-                fourteenDaysBeforeLast: formatDate(fourteenDaysBeforeLast),
-                adjustedFourteenDaysBeforeLast: formatDate(adjustedFourteenDaysBeforeLast),
-                A_start: formatDate(A_start),
-                A_Days
-            });
+    enablePushBtn?.addEventListener('click', async () => {
+      try {
+        if (!('Notification' in window)) {
+          setPushStatus('Notification API が使えません。');
+          return;
+        }
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          setPushStatus('通知が許可されませんでした。');
+          return;
+        }
+        if (!('serviceWorker' in navigator)) {
+          setPushStatus('Service Worker が使えません。');
+          return;
         }
 
-        // ★変更（holidays渡す）
-        await displayBusinessDays(businessDaysList, holidays);
+        const registration = await navigator.serviceWorker.register('./sw.js');
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        });
+        const payload = subscription.toJSON ? subscription.toJSON() : subscription;
+        setPushStatus(`PushSubscription を取得しました。\n\n${JSON.stringify(payload, null, 2)}`);
+
+        if (workerUrl && !workerUrl.includes('YOUR_CLOUDFLARE_WORKER_URL')) {
+          const res = await fetch(workerUrl.replace(/\/$/, '') + '/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || `Worker error: ${res.status}`);
+          setPushStatus(`PushSubscription をWorkerへ送信しました。\n\n${JSON.stringify(data, null, 2)}`);
+        }
+      } catch (error) {
+        console.error(error);
+        setPushStatus(`通知初期化でエラーが発生しました。\n${error?.message || error}`);
+      }
+    });
+
+    async function getBusinessDaysForNext13Months() {
+      const currentYear = new Date().getFullYear();
+      const holidays = await fetchHolidays([currentYear, currentYear + 1]);
+      const businessDaysList = [];
+      const kijyuntoday = new Date();
+      kijyuntoday.setHours(0, 0, 0, 0);
+
+      const calendarToday = new Date();
+      calendarToday.setHours(0, 0, 0, 0);
+
+      const effectiveToday = await getEffectiveToday(holidays);
+
+      for (let monthOffset = 0; monthOffset < 6; monthOffset++) {
+        const currentMonth = new Date(kijyuntoday);
+        currentMonth.setDate(1);
+        currentMonth.setMonth(currentMonth.getMonth() + monthOffset);
+
+        const lastBusinessDay = await getLastBusinessDayOfMonth(currentMonth.getFullYear(), currentMonth.getMonth(), holidays);
+        const oneBusinessDayBefore = await getNthBusinessDayBefore(lastBusinessDay, 1, holidays);
+        const twoBusinessDaysBefore = await getNthBusinessDayBefore(lastBusinessDay, 2, holidays);
+        const B = await getNthBusinessDayAfter(oneBusinessDayBefore, 2, holidays);
+
+        const today_plus_2 = await getNthBusinessDayAfter(effectiveToday, 2, holidays);
+        const today_daysDifference = Math.abs(calculateDaysBetween(today_plus_2, B)) + 1;
+        const A_start = twoBusinessDaysBefore;
+
+        const A_Days = [];
+        let previousDaysDifference = null;
+        let i = 1;
+
+        while (true) {
+          const A = await getNthBusinessDayBefore(oneBusinessDayBefore, i, holidays);
+          if (A < calendarToday) break;
+          const A_plus_2 = await getNthBusinessDayAfter(A, 2, holidays);
+          const daysDifference = Math.abs(calculateDaysBetween(A_plus_2, B)) + 1;
+          let mark = "";
+          if (previousDaysDifference !== null && daysDifference - previousDaysDifference >= 2) mark = " ";
+          A_Days.push({ A: formatDate(A), A_plus_2: formatDate(A_plus_2), daysDifference, mark });
+          previousDaysDifference = daysDifference;
+          i++;
+        }
+
+        A_Days.push({
+          A: formatDate(effectiveToday),
+          A_plus_2: formatDate(today_plus_2),
+          daysDifference: today_daysDifference,
+          mark: "",
+        });
+
+        businessDaysList.push({
+          month: currentMonth.getMonth() + 1,
+          year: currentMonth.getFullYear(),
+          lastBusinessDay: formatDate(lastBusinessDay),
+          oneBusinessDayBefore: formatDate(oneBusinessDayBefore),
+          twoBusinessDaysBefore: formatDate(twoBusinessDaysBefore),
+          B: formatDate(B),
+          A_start: formatDate(A_start),
+          A_Days,
+        });
+      }
+
+      await displayBusinessDays(businessDaysList, holidays);
     }
 
     async function fetchHolidays(years) {
@@ -196,9 +237,7 @@
       let tempDate = new Date(date);
       while (n > 0) {
         tempDate.setDate(tempDate.getDate() - 1);
-        if (!isWeekend(tempDate) && !isHoliday(tempDate, holidays) && !isNewYearEve(tempDate)) {
-          n--;
-        }
+        if (!isWeekend(tempDate) && !isHoliday(tempDate, holidays) && !isNewYearEve(tempDate)) n--;
       }
       return tempDate;
     }
@@ -207,9 +246,7 @@
       let tempDate = new Date(date);
       while (n > 0) {
         tempDate.setDate(tempDate.getDate() + 1);
-        if (!isWeekend(tempDate) && !isHoliday(tempDate, holidays) && !isNewYearEve(tempDate)) {
-          n--;
-        }
+        if (!isWeekend(tempDate) && !isHoliday(tempDate, holidays) && !isNewYearEve(tempDate)) n--;
       }
       return tempDate;
     }
@@ -242,60 +279,57 @@
       return Math.floor((dateA - dateB) / (1000 * 60 * 60 * 24));
     }
 
-    // ★追加（営業日ベースの今日）
     async function getEffectiveToday(holidays) {
       const now = new Date();
       let today = new Date(now);
       today.setHours(0, 0, 0, 0);
-
       if (now.getHours() > 15 || (now.getHours() === 15 && now.getMinutes() >= 30)) {
         today = await getNthBusinessDayAfter(today, 1, holidays);
       }
-
       return today;
     }
 
-    // ★変更（async + holidays）
     async function displayBusinessDays(businessDays, holidays) {
-        const listElement = document.getElementById('business-days-list');
-        listElement.innerHTML = "";
+      const listElement = document.getElementById('business-days-list');
+      const span = document.getElementById('oneDayCost');
+      listElement.innerHTML = "";
 
-        const inputValue = parseFloat(document.getElementById('inputValue').value) * 10000;
+      const inputValue = parseFloat(document.getElementById('inputValue').value) * 10000;
 
-        // ★追加
-        const effectiveToday = await getEffectiveToday(holidays);
-        const effectiveTodayStr = formatDate(effectiveToday);
+      if (span) {
+        if (inputValue && !isNaN(inputValue)) {
+          const inputValueKai = Math.floor(inputValue * 0.0327 / 365 * 1);
+          span.textContent = `(${inputValueKai}円)`;
+        } else {
+          span.textContent = "";
+        }
+      }
 
-        businessDays.forEach(item => {
-            const li = document.createElement('li');
-            let text = `<strong>${item.year}年${item.month}月</strong> <br> 
-                最終購入: ${item.A_start} / 売却可: ${item.oneBusinessDayBefore} <br>
-                <span style="color: blue;">SBI開始: ${item.fifteenBusinessDaysBefore}</span>  / 
-                      <span style="color: red;"> R開始: ${item.adjustedFourteenDaysBeforeLast}</span> <br>`; 
+      const effectiveToday = await getEffectiveToday(holidays);
+      const effectiveTodayStr = formatDate(effectiveToday);
 
-            item.A_Days.forEach((AData, index) => {
-                const calculatedValue = inputValue ? Math.floor(inputValue * 0.039 / 365 * AData.daysDifference) : "";
+      businessDays.forEach(item => {
+        const li = document.createElement('li');
+        let text = `<strong>${item.year}年${item.month}月</strong><br>
+          最終営業日: ${item.A_start} / 1営業日前: ${item.oneBusinessDayBefore}<br>`;
 
-                // ★追加（赤表示）
-                let displayDate = AData.A;
-                if (AData.A === effectiveTodayStr) {
-                    displayDate = `<span style="color:red; font-weight:bold;">${AData.A}</span>`;
-                }
-
-                text += `購入日: ${displayDate} (${AData.daysDifference}日) ${calculatedValue ? ` -- ${calculatedValue}円` : ""}${AData.mark}<br>`;
-
-                if (index === item.A_Days.length - 2) {
-                    text += `<hr>`;
-                    text += `<strong><span style="color: blue;">SBI開始時点</span></strong>で参加した場合<br>`;
-                    text += `<hr>`;
-                }
-            });
-
-            const div = document.createElement('div');
-            div.innerHTML = text.trim();
-            li.appendChild(div);
-            listElement.appendChild(li);
+        item.A_Days.forEach((AData, index) => {
+          const calculatedValue = inputValue ? Math.floor(inputValue * 0.0327 / 365 * 1 + inputValue * 0.019 / 365 * AData.daysDifference) : "";
+          let displayDate = AData.A;
+          if (AData.A === effectiveTodayStr) {
+            displayDate = `<span style="color:red; font-weight:bold;">${AData.A}</span>`;
+          }
+          text += `対象日: ${displayDate} (${AData.daysDifference}日) ${calculatedValue ? ` -- ${calculatedValue}円` : ""}${AData.mark}<br>`;
+          if (index === item.A_Days.length - 2) {
+            text += `<hr><strong>SBI実行時刻</strong><br><hr>`;
+          }
         });
+
+        const div = document.createElement('div');
+        div.innerHTML = text.trim();
+        li.appendChild(div);
+        listElement.appendChild(li);
+      });
     }
 
     function updateDisplay() {
@@ -313,7 +347,7 @@
         url = `./forSmbc.html?${sampleParams.toString()}`;
       } else {
         url = `./forRakutenMukigen.html?${sampleParams.toString()}`;
-      }    
+      }
       window.location.href = url;
       return false;
     }
@@ -326,63 +360,6 @@
           .then(reg => console.log('Service Worker registered', reg))
           .catch(err => console.log('Service Worker registration failed', err));
       });
-    }
-  </script>
-  <script>
-    const vapidPublicKey = "BOEGQ9vF1HqXOCkw3s-rAetWgwpsODZso1noV1v0f7LN5Owf13tmnqpLjjizMYh6GsGWOBTLKf8nJlrCbWx1Trs";
-    const statusEl = document.getElementById("pushStatus");
-    const enablePushBtn = document.getElementById("enablePushBtn");
-
-    function setPushStatus(message) {
-      if (statusEl) {
-        statusEl.textContent = message;
-      }
-    }
-
-    enablePushBtn?.addEventListener("click", async () => {
-      try {
-        if (!("Notification" in window)) {
-          setPushStatus("この端末/ブラウザでは Notification API が使えません。");
-          return;
-        }
-
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") {
-          setPushStatus("通知が許可されませんでした。");
-          return;
-        }
-
-        if (!("serviceWorker" in navigator)) {
-          setPushStatus("Service Worker が使えません。");
-          return;
-        }
-
-        const registration = await navigator.serviceWorker.register("./sw.js");
-        const subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
-        });
-
-        const payload = subscription.toJSON ? subscription.toJSON() : subscription;
-        setPushStatus(`PushSubscription を取得しました。\n\n${JSON.stringify(payload, null, 2)}`);
-        console.log("PushSubscription:", payload);
-      } catch (error) {
-        console.error(error);
-        setPushStatus(`通知初期化でエラーが発生しました。\n${error?.message || error}`);
-      }
-    });
-
-    function urlBase64ToUint8Array(base64String) {
-      const padding = "=".repeat((4 - base64String.length % 4) % 4);
-      const base64 = (base64String + padding)
-        .replace(/-/g, "+")
-        .replace(/_/g, "/");
-      const rawData = window.atob(base64);
-      const outputArray = new Uint8Array(rawData.length);
-      for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
-      }
-      return outputArray;
     }
   </script>
 </body>
