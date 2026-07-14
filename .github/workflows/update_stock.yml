@@ -31,38 +31,59 @@ jobs:
           import pandas as pd
           import yfinance as yf
           import json
+          import time
           
           print('1. JPX公式から最新の上場銘柄リストを取得中...')
           url = 'https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xls'
           df = pd.read_excel(url)
           
           # コードと銘柄名（会社名）をペアにして取得
-          # ※JPXのExcelにある列名「銘柄名」を使用します
           stock_dict = dict(zip(df['コード'].astype(str), df['銘柄名'].astype(str)))
           codes = list(stock_dict.keys())
-          tickers = [c + '.T' for c in codes]
           
-          print(f'2. {len(codes)}銘柄の株価を取得中...')
-          data = yf.download(tickers, period='1d', threads=True, progress=False)
+          print(f'2. {len(codes)}銘柄の株価を小分けにして安全に取得中...')
           
+          # 大量一括リクエストによる取りこぼしを防ぐため、200銘柄ずつ小分けにして取得
+          batch_size = 200
           results = {}
-          for code in codes:
-              t = code + '.T'
+          
+          for i in range(0, len(codes), batch_size):
+              batch_codes = codes[i:i+batch_size]
+              batch_tickers = [c + '.T' for c in batch_codes]
+              
+              print(f'   -> [{i}/{len(codes)}] 取得中...')
               try:
-                  price = data['Close'][t].dropna().iloc[-1]
+                  data = yf.download(batch_tickers, period='1d', threads=True, progress=False)
                   
-                  # 価格だけでなく、会社名も一緒にJSONに格納します
-                  results[code] = {
-                      'name': stock_dict[code],
-                      'price': float(price)
-                  }
-              except:
+                  for code in batch_codes:
+                      t = code + '.T'
+                      try:
+                          # 1件取得の場合と複数件取得の場合のデータ構造の差異を吸収
+                          if isinstance(data, pd.DataFrame) and 'Close' in data.columns:
+                              if isinstance(data['Close'], pd.Series):
+                                  price_series = data['Close'].dropna()
+                              else:
+                                  price_series = data['Close'][t].dropna()
+                                  
+                              if not price_series.empty:
+                                  price = price_series.iloc[-1]
+                                  results[code] = {
+                                      'name': stock_dict[code],
+                                      'price': float(price)
+                                  }
+                      except:
+                          continue
+              except Exception as e:
+                  print(f'   ⚠️ バッチ取得エラー (リトライします): {e}')
+                  time.sleep(2)
                   continue
+              
+              time.sleep(0.5) # サーバーに負荷をかけないよう少し休憩
           
           with open('data.json', 'w') as f:
-              json.dump(results, f, ensure_ascii=False) # 日本語が文字化けしないように保存
+              json.dump(results, f, ensure_ascii=False)
               
-          print('3. 会社名と価格が入ったdata.jsonの生成が完了しました！')
+          print(f'3. 完了！ 取得成功: {len(results)}/{len(codes)} 銘柄')
           "
 
       - name: Commit and Push changes
