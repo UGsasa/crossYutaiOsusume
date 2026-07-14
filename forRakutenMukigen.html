@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,9 +12,10 @@
   <link rel="apple-touch-icon" href="./icon-192.png">
   <style>
     pre {
-      white-space: pre-wrap; 
+      white-space: pre-wrap;
       word-wrap: break-word;
     }
+
     body {
       font-family: Arial, sans-serif;
       margin: 0;
@@ -38,7 +40,8 @@
       gap: 5px;
       justify-content: center;
     }
-    .container{
+
+    .container {
       display: flex;
       justify-content: space-around;
     }
@@ -66,6 +69,7 @@
       white-space: nowrap;
       overflow-x: auto;
     }
+
     #business-days-list li {
       margin-bottom: 15px;
       list-style: none;
@@ -79,29 +83,159 @@
       border-radius: 6px;
       background-color: #f9f9f9;
     }
+
+    /* ーーー 検索ボックスとサジェストのスタイル ーーー */
+    .search-container {
+      margin: 15px auto;
+      text-align: center;
+      position: relative;
+      max-width: 400px;
+      width: 90%;
+      overflow: visible !important;
+      white-space: normal !important;
+    }
+
+    .search-input {
+      width: 100%;
+      text-align: left;
+      padding: 6px;
+      font-size: 0.95em;
+      border: 1px solid #333;
+      border-radius: 4px;
+      box-sizing: border-box;
+      background-color: #fff;
+    }
+
+    .suggestion-list {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      width: 100%;
+      background: #ffffff !important;
+      border: 2px solid #333 !important;
+      border-top: none !important;
+      height: auto !important;
+      min-height: 50px;
+      max-height: 300px;
+      overflow-y: auto !important;
+      display: block;
+      z-index: 9999 !important;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+      text-align: left;
+      margin: 0 !important;
+      padding: 0 !important;
+      border-radius: 0 0 6px 6px;
+      box-sizing: border-box !important;
+    }
+
+    .suggestion-item {
+      display: block !important;
+      padding: 12px 10px !important;
+      cursor: pointer;
+      border-bottom: 1px solid #eee !important;
+      font-size: 1em !important;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      background: #fff !important;
+      color: #333 !important;
+      margin: 0 !important;
+      border-radius: 0 !important;
+      height: auto !important;
+      box-sizing: border-box !important;
+    }
+
+    .suggestion-item:hover {
+      background-color: #f0f4f8 !important;
+    }
+
+    .selected-stock-info {
+      font-size: 0.85em;
+      color: #555;
+      margin-top: 6px;
+      min-height: 18px;
+      text-align: center;
+      white-space: normal !important;
+      overflow: visible !important;
+    }
+
+    /* スピナーを常に隠す */
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
+
+    /* 株数操作ボタン */
+    .stock-step-buttons {
+      display: inline-block;
+    }
+
+    .stock-step-buttons button {
+      padding: 4px 12px;
+      margin: 0 4px;
+      font-size: 0.85em;
+      border-radius: 4px;
+      border: 1px solid #555;
+      background: #fff;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .stock-step-buttons button:hover {
+      background: #e8f0fe;
+    }
   </style>
 </head>
+
 <body>
   <h2>貸株料の効率:楽天長期</h2>
-  <p>※1 貸株料率は年利1.1%の前提で計算 </p>
-  <strong><font color="blue">実際は下記日付の前営業日19時から注文可</font></strong>
-  <p>×のついた日の次の日にポジションを取るのが相対的には効率良い気がする。</p>
+  <details style="text-align: center; margin-bottom: 10px;">
+    <summary style="cursor: pointer; color: #555; font-size: 0.9em;">前提条件・注意事項を表示</summary>
+    <div style="margin-top: 10px; font-size: 0.9em;">
+      <p style="margin: 5px 0;">※1 貸株料率は年利1.1%の前提で計算 </p>
+      <strong>
+        <font color="blue">実際は下記日付の前営業日19時から注文可</font>
+      </strong>
+      <p style="margin: 5px 0;">×のついた日の次の日にポジションを取るのが相対的には効率良い気がする。</p>
+    </div>
+  </details>
   <div class="container">
     <a href="javascript:void(0);" onclick="OnLinkClick(0);">SBI/楽天(短期)に切替</a>
-    <a href="javascript:void(0);" onclick="OnLinkClick(1);"><font color="#ED174D">SMBC日興証券に切替</font></a>
+    <a href="javascript:void(0);" onclick="OnLinkClick(1);">
+      <font color="#ED174D">SMBC日興証券に切替</font>
+    </a>
   </div>
+
+  <div class="search-container">
+    <input type="text" id="stockSearchInput" class="search-input" placeholder="コード または 会社名を入力 (例: 1301)"
+      autocomplete="off" onfocus="this.select();">
+    <ul id="suggestionList" class="suggestion-list" style="display: none;"></ul>
+    <div id="selectedStockInfo" class="selected-stock-info"></div>
+  </div>
+
   <div class="input-container">
     <label for="inputValue">金額:</label>
-    <input type="number" id="inputValue" value="20" oninput="updateDisplay()" onfocus="this.select();">
+    <input type="number" id="inputValue" value="20" oninput="handleManualAmountInput(event)" onfocus="this.select();"
+      step="any">
     <label for="inputValue">万円</label>
+    <div id="stockStepButtons" class="stock-step-buttons" style="display:none; margin-left: 5px;">
+      <button onclick="adjustShares(-100)">−100株</button>
+      <button onclick="adjustShares(100)">+100株</button>
+    </div>
   </div>
   <ul id="business-days-list"></ul>
 
   <script>
     let myurl = new URL(window.location.href);
     let params = myurl.searchParams;
-    value = params.get('inputValue')
-    if (!value){
+    let value = params.get('inputValue');
+    let stockQuery = params.get('stockQuery');
+    if (!value) {
       value = 20
     }
 
@@ -109,97 +243,243 @@
 
     const holidaysApiUrl = "https://holidays-jp.github.io/api/v1/date.json";
 
-    async function getBusinessDaysForNext13Months() {
-        const currentYear = new Date().getFullYear();
-        const holidays = await fetchHolidays([currentYear, currentYear + 1]);
-        const businessDaysList = [];
-        const kijyuntoday = new Date();
-        kijyuntoday.setHours(0, 0, 0, 0);
+    let cachedStockData = null;
+    let selectedStockPrice = 0;
 
-        // ★追加：15:30に関係なく、純粋な「今日」の日付
-        const calendarToday = new Date();
-        calendarToday.setHours(0, 0, 0, 0);
+    async function loadStockData() {
+      try {
+        const response = await fetch('./data.json');
+        cachedStockData = await response.json();
+        initStockSearch();
 
-        // 営業日基準の今日（15:30以降は翌営業日）
-        const effectiveToday = await getEffectiveToday(holidays);
+        if (stockQuery) {
+          const match = stockQuery.match(/^\[([A-Z0-9]+)\]/i);
+          let code = match ? match[1] : null;
+          if (code && cachedStockData[code]) {
+            const searchInput = document.getElementById('stockSearchInput');
+            searchInput.value = stockQuery;
+            selectedStockPrice = cachedStockData[code].price;
 
-        for (let monthOffset = 0; monthOffset < 6; monthOffset++) {
-            const currentMonth = new Date(kijyuntoday);
-            currentMonth.setDate(1);
-            currentMonth.setMonth(currentMonth.getMonth() + monthOffset);
+            const amountInput = document.getElementById('inputValue');
+            amountInput.classList.add('has-stock');
 
-            const lastBusinessDay = await getLastBusinessDayOfMonth(currentMonth.getFullYear(), currentMonth.getMonth(), holidays);
-            const oneBusinessDayBefore = await getNthBusinessDayBefore(lastBusinessDay, 1, holidays);
-            const B = await getNthBusinessDayAfter(oneBusinessDayBefore, 2, holidays);
+            const priceFor100SharesInWanYen = (selectedStockPrice * 100) / 10000;
+            const stepStr = priceFor100SharesInWanYen.toFixed(4).replace(/\.?0+$/, '');
+            amountInput.setAttribute('step', stepStr);
+            amountInput.setAttribute('min', stepStr);
 
-            const today_plus_2 = await getNthBusinessDayAfter(effectiveToday, 2, holidays);
-            const today_daysDifference = Math.abs(calculateDaysBetween(today_plus_2, B)) + 1;
+            document.getElementById('stockStepButtons').style.display = 'block';
+            const infoDiv = document.getElementById('selectedStockInfo');
+            let shares = Math.round((parseFloat(amountInput.value) * 10000) / selectedStockPrice);
+            if (isNaN(shares) || shares < 0) shares = 0;
+            infoDiv.innerHTML = `<strong>${shares.toLocaleString()}</strong>株 = <strong>${amountInput.value}</strong> 万円`;
+          }
+        }
+      } catch (e) {
+        console.error("data.jsonの読み込みに失敗しました:", e);
+        document.getElementById('selectedStockInfo').textContent = "※株価データのロードに失敗しました";
+      }
+    }
 
-            let fourteenDaysBeforeLast = new Date(lastBusinessDay);
-            fourteenDaysBeforeLast.setDate(fourteenDaysBeforeLast.getDate() - 14 + 1);
+    function initStockSearch() {
+      const searchInput = document.getElementById('stockSearchInput');
+      const sugList = document.getElementById('suggestionList');
+      const infoDiv = document.getElementById('selectedStockInfo');
+      const amountInput = document.getElementById('inputValue');
 
-            let adjustedFourteenDaysBeforeLast = fourteenDaysBeforeLast;
-            while (isWeekend(adjustedFourteenDaysBeforeLast) || isHoliday(adjustedFourteenDaysBeforeLast, holidays)) {
-                adjustedFourteenDaysBeforeLast = await getNthBusinessDayAfter(adjustedFourteenDaysBeforeLast, 1, holidays);
-            }
+      function toKanaNormal(str) {
+        if (!str) return "";
 
-            const rakutenLastDay = await getNthBusinessDayBefore(adjustedFourteenDaysBeforeLast, 1, holidays);
-            const A_start = await getNthBusinessDayBefore(lastBusinessDay, 2, holidays); // ここ修正しました
+        // 0. 全角英数字を半角に変換
+        str = str.replace(/[Ａ-Ｚａ-ｚ０-９]/g, function (s) {
+          return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+        });
 
-            const A_Days = [];
-            let previousDaysDifference = null;
-            let i = 1;
+        const kanaMap = {
+          'ｱ': 'ア', 'ｲ': 'イ', 'ｳ': 'ウ', 'ｴ': 'エ', 'ｵ': 'オ', 'ｶ': 'カ', 'ｷ': 'キ', 'ｸ': 'ク', 'ｹ': 'ケ', 'ｺ': 'コ',
+          'ｻ': 'サ', 'ｼ': 'シ', 'ｽ': 'ス', 'ｾ': 'セ', 'ｿ': 'ソ', 'ﾀ': 'タ', 'ﾁ': 'チ', 'ﾂ': 'ツ', 'ﾃ': 'テ', 'ﾄ': 'ト',
+          'ﾅ': 'ナ', 'ﾆ': 'ニ', 'ﾇ': 'ヌ', 'ﾈ': 'ネ', 'ﾉ': 'ノ', 'ﾊ': 'ハ', 'ﾋ': 'ヒ', 'ﾌ': 'フ', 'ﾍ': 'ヘ', 'ﾎ': 'ホ',
+          'ﾏ': 'マ', 'ﾐ': 'ミ', 'ﾑ': 'ム', 'ﾒ': 'メ', 'ﾓ': 'モ', 'ﾔ': 'ヤ', 'ﾕ': 'ユ', 'ﾖ': 'ヨ', 'ﾗ': 'ラ', 'ﾘ': 'リ',
+          'ﾙ': 'ル', 'ﾚ': 'レ', 'ﾛ': 'ロ', 'ﾜ': 'ワ', 'ｦ': 'ヲ', 'ﾝ': 'ン',
+          'ｧ': 'ァ', 'ｨ': 'ィ', 'ｩ': 'ゥ', 'ｪ': 'ェ', 'ｫ': 'ォ', 'ｬ': 'ャ', 'ｭ': 'ュ', 'ｮ': 'ョ', 'ｯ': 'ッ',
+          'ﾞ': '゛', 'ﾟ': '゜', 'ｰ': 'ー'
+        };
+        let zenkaku = str.replace(/[ｱ-ﾝｧ-ｮｯｰ]/g, m => kanaMap[m] || m);
+        zenkaku = zenkaku.replace(/（カ|キ|ク|ケ|コ）゛/g, m => String.fromCharCode(m.charCodeAt(0) + 1));
+        return zenkaku.replace(/[\u30a1-\u30f6]/g, match => {
+          return String.fromCharCode(match.charCodeAt(0) - 0x60);
+        });
+      }
 
-            while (true) {
-                const A = await getNthBusinessDayBefore(oneBusinessDayBefore, i, holidays);
+      searchInput.addEventListener('input', () => {
+        const rawQuery = searchInput.value.trim().toLowerCase();
+        const query = toKanaNormal(rawQuery);
 
-                // ★修正：判定を effectiveToday ではなく calendarToday に変更
-                if (A < calendarToday) break;
+        sugList.innerHTML = '';
 
-                if (A >= adjustedFourteenDaysBeforeLast) {
-                    i++;
-                    continue;
-                }
-
-                const A_plus_2 = await getNthBusinessDayAfter(A, 2, holidays);
-                const daysDifference = Math.abs(calculateDaysBetween(A_plus_2, B)) + 1;
-                let mark = "";
-
-                if (previousDaysDifference !== null && daysDifference - previousDaysDifference >= 2) {
-                    mark = " → ×";
-                }
-
-                A_Days.push({
-                    A: formatDate(A),
-                    A_plus_2: formatDate(A_plus_2),
-                    daysDifference,
-                    mark
-                });
-
-                previousDaysDifference = daysDifference;
-                i++;
-            }
-
-            if (A_Days.length > 0) {
-                A_Days.push({
-                    A: formatDate(effectiveToday),
-                    A_plus_2: formatDate(today_plus_2),
-                    daysDifference: today_daysDifference,
-                    mark: "（本日）"
-                });
-            }
-
-            businessDaysList.push({
-                month: currentMonth.getMonth() + 1,
-                year: currentMonth.getFullYear(),
-                rakutenLastDay: formatDate(rakutenLastDay),
-                A_start: formatDate(A_start),
-                oneBusinessDayBefore: formatDate(oneBusinessDayBefore),
-                A_Days
-            });
+        if (!rawQuery || !cachedStockData) {
+          sugList.style.display = 'none';
+          return;
         }
 
-        await displayBusinessDays(businessDaysList, holidays);
+        const matches = [];
+        for (const code in cachedStockData) {
+          const stock = cachedStockData[code];
+          const name = stock.name.toLowerCase();
+
+          const isExclude =
+            name.includes('ｅｔｆ') || name.includes('etf') ||
+            name.includes('リート') || name.includes('reit') ||
+            name.includes('上場投信') || name.includes('インフラ') ||
+            name.includes('インデックス') || name.includes('ダブルインバース') ||
+            name.includes('ブルベア') || name.includes('レバレッジ') ||
+            name.includes('ｅｔｎ') || name.includes('etn') ||
+            name.includes('信託') || name.includes('社債') ||
+            name.includes('為替ヘッジ');
+
+          if (isExclude) {
+            continue;
+          }
+
+          const normalizedName = toKanaNormal(name);
+
+          if (code.includes(rawQuery) || normalizedName.includes(query)) {
+            matches.push({ code, name: stock.name, price: stock.price });
+          }
+          if (matches.length >= 100) break;
+        }
+
+        if (matches.length > 0) {
+          matches.forEach(item => {
+            const li = document.createElement('li');
+            li.className = 'suggestion-item';
+            li.innerHTML = `<span style="font-weight:bold; color:#0056b3;">${item.code}</span> - ${item.name} <span style="color:#d9534f; float:right; font-weight:bold;">${item.price.toLocaleString()}円</span>`;
+
+            li.addEventListener('click', () => {
+              searchInput.value = `[${item.code}] ${item.name}`;
+              sugList.style.display = 'none';
+
+              selectedStockPrice = item.price;
+              amountInput.classList.add('has-stock');
+
+              const priceFor100SharesInWanYen = (item.price * 100) / 10000;
+              // 浮動小数点の誤差を防ぎ、stepを文字列として設定
+              const stepStr = priceFor100SharesInWanYen.toFixed(4).replace(/\.?0+$/, '');
+              amountInput.setAttribute('step', stepStr);
+              amountInput.setAttribute('min', stepStr);
+              amountInput.value = stepStr;
+
+              document.getElementById('stockStepButtons').style.display = 'block';
+              infoDiv.innerHTML = `<strong>100</strong>株 = <strong>${stepStr}</strong> 万円`;
+
+              updateDisplay();
+            });
+            sugList.appendChild(li);
+          });
+          sugList.style.display = 'block';
+        } else {
+          sugList.style.display = 'none';
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (e.target !== searchInput && e.target !== sugList) {
+          sugList.style.display = 'none';
+        }
+      });
+    }
+
+    async function getBusinessDaysForNext13Months() {
+      const currentYear = new Date().getFullYear();
+      const holidays = await fetchHolidays([currentYear, currentYear + 1]);
+      const businessDaysList = [];
+      const kijyuntoday = new Date();
+      kijyuntoday.setHours(0, 0, 0, 0);
+
+      // ★追加：15:30に関係なく、純粋な「今日」の日付
+      const calendarToday = new Date();
+      calendarToday.setHours(0, 0, 0, 0);
+
+      // 営業日基準の今日（15:30以降は翌営業日）
+      const effectiveToday = await getEffectiveToday(holidays);
+
+      for (let monthOffset = 0; monthOffset < 6; monthOffset++) {
+        const currentMonth = new Date(kijyuntoday);
+        currentMonth.setDate(1);
+        currentMonth.setMonth(currentMonth.getMonth() + monthOffset);
+
+        const lastBusinessDay = await getLastBusinessDayOfMonth(currentMonth.getFullYear(), currentMonth.getMonth(), holidays);
+        const oneBusinessDayBefore = await getNthBusinessDayBefore(lastBusinessDay, 1, holidays);
+        const B = await getNthBusinessDayAfter(oneBusinessDayBefore, 2, holidays);
+
+        const today_plus_2 = await getNthBusinessDayAfter(effectiveToday, 2, holidays);
+        const today_daysDifference = Math.abs(calculateDaysBetween(today_plus_2, B)) + 1;
+
+        let fourteenDaysBeforeLast = new Date(lastBusinessDay);
+        fourteenDaysBeforeLast.setDate(fourteenDaysBeforeLast.getDate() - 14 + 1);
+
+        let adjustedFourteenDaysBeforeLast = fourteenDaysBeforeLast;
+        while (isWeekend(adjustedFourteenDaysBeforeLast) || isHoliday(adjustedFourteenDaysBeforeLast, holidays)) {
+          adjustedFourteenDaysBeforeLast = await getNthBusinessDayAfter(adjustedFourteenDaysBeforeLast, 1, holidays);
+        }
+
+        const rakutenLastDay = await getNthBusinessDayBefore(adjustedFourteenDaysBeforeLast, 1, holidays);
+        const A_start = await getNthBusinessDayBefore(lastBusinessDay, 2, holidays); // ここ修正しました
+
+        const A_Days = [];
+        let previousDaysDifference = null;
+        let i = 1;
+
+        while (true) {
+          const A = await getNthBusinessDayBefore(oneBusinessDayBefore, i, holidays);
+
+          // ★修正：判定を effectiveToday ではなく calendarToday に変更
+          if (A < calendarToday) break;
+
+          if (A >= adjustedFourteenDaysBeforeLast) {
+            i++;
+            continue;
+          }
+
+          const A_plus_2 = await getNthBusinessDayAfter(A, 2, holidays);
+          const daysDifference = Math.abs(calculateDaysBetween(A_plus_2, B)) + 1;
+          let mark = "";
+
+          if (previousDaysDifference !== null && daysDifference - previousDaysDifference >= 2) {
+            mark = " → ×";
+          }
+
+          A_Days.push({
+            A: formatDate(A),
+            A_plus_2: formatDate(A_plus_2),
+            daysDifference,
+            mark
+          });
+
+          previousDaysDifference = daysDifference;
+          i++;
+        }
+
+        if (A_Days.length > 0) {
+          A_Days.push({
+            A: formatDate(effectiveToday),
+            A_plus_2: formatDate(today_plus_2),
+            daysDifference: today_daysDifference,
+            mark: "（本日）"
+          });
+        }
+
+        businessDaysList.push({
+          month: currentMonth.getMonth() + 1,
+          year: currentMonth.getFullYear(),
+          rakutenLastDay: formatDate(rakutenLastDay),
+          A_start: formatDate(A_start),
+          oneBusinessDayBefore: formatDate(oneBusinessDayBefore),
+          A_Days
+        });
+      }
+
+      await displayBusinessDays(businessDaysList, holidays);
     }
 
     async function getEffectiveToday(holidays) {
@@ -219,42 +499,42 @@
     }
 
     async function displayBusinessDays(businessDays, holidays) {
-        const listElement = document.getElementById('business-days-list');
-        listElement.innerHTML = "";
+      const listElement = document.getElementById('business-days-list');
+      listElement.innerHTML = "";
 
-        const inputValue = parseFloat(document.getElementById('inputValue').value) * 10000;
+      const inputValue = parseFloat(document.getElementById('inputValue').value) * 10000;
 
-        const effectiveToday = await getEffectiveToday(holidays);
-        const effectiveTodayStr = formatDate(effectiveToday);
+      const effectiveToday = await getEffectiveToday(holidays);
+      const effectiveTodayStr = formatDate(effectiveToday);
 
-        businessDays.forEach(item => {
-            const li = document.createElement('li');
-            let text = `<strong>${item.year}年${item.month}月</strong> <br> 
+      businessDays.forEach(item => {
+        const li = document.createElement('li');
+        let text = `<strong>${item.year}年${item.month}月</strong> <br> 
                 最終購入: ${item.A_start} / 売却可: ${item.oneBusinessDayBefore} <br>
-                楽天長期最終: <font color="red">${item.rakutenLastDay} 15:30迄</font> <br>`; 
+                楽天長期最終: <font color="red">${item.rakutenLastDay} 15:30迄</font> <br>`;
 
-            item.A_Days.forEach((AData, index) => {
-                const calculatedValue = inputValue ? Math.floor(inputValue * 0.011 / 365 * AData.daysDifference) : "";
+        item.A_Days.forEach((AData, index) => {
+          const calculatedValue = inputValue ? Math.floor(inputValue * 0.011 / 365 * AData.daysDifference) : "";
 
-                let dateText = AData.A;
-                if (AData.A === effectiveTodayStr) {
-                    dateText = `<span style="color:red; font-weight:bold;">${AData.A}</span>`;
-                }
+          let dateText = AData.A;
+          if (AData.A === effectiveTodayStr) {
+            dateText = `<span style="color:red; font-weight:bold;">${AData.A}</span>`;
+          }
 
-                text += `購入日: ${dateText} (${AData.daysDifference}日) ${calculatedValue ? ` -- ${calculatedValue}円` : ""}${AData.mark}<br>`;
+          text += `購入日: ${dateText} (${AData.daysDifference}日) ${calculatedValue ? ` -- ${calculatedValue}円` : ""}${AData.mark}<br>`;
 
-                if (index === item.A_Days.length - 2) {
-                    text += `<hr>`;
-                    text += `<strong><span>今</span></strong> から参加した場合<br>`;
-                    text += `<hr>`;
-                }
-            });
-
-            const div = document.createElement('div');
-            div.innerHTML = text.trim();
-            li.appendChild(div);
-            listElement.appendChild(li);
+          if (index === item.A_Days.length - 2) {
+            text += `<hr>`;
+            text += `<strong><span>今</span></strong> から参加した場合<br>`;
+            text += `<hr>`;
+          }
         });
+
+        const div = document.createElement('div');
+        div.innerHTML = text.trim();
+        li.appendChild(div);
+        listElement.appendChild(li);
+      });
     }
 
     async function fetchHolidays(years) {
@@ -309,6 +589,50 @@
       return Math.floor((dateA - dateB) / (1000 * 60 * 60 * 24));
     }
 
+    function handleManualAmountInput(e) {
+      const searchInput = document.getElementById('stockSearchInput');
+      const infoDiv = document.getElementById('selectedStockInfo');
+      const amountInput = document.getElementById('inputValue');
+
+      if (selectedStockPrice > 0) {
+        const isManual = e && e.inputType && e.inputType.match(/insertText|delete|insertFromPaste|insertCompositionText/);
+
+        if (isManual) {
+          searchInput.value = '';
+          infoDiv.innerHTML = '';
+          selectedStockPrice = 0;
+          amountInput.classList.remove('has-stock');
+          amountInput.setAttribute('step', 'any');
+          amountInput.removeAttribute('min');
+          document.getElementById('stockStepButtons').style.display = 'none';
+        } else {
+          let shares = Math.round((parseFloat(amountInput.value) * 10000) / selectedStockPrice);
+          if (isNaN(shares) || shares < 0) shares = 0;
+          infoDiv.innerHTML = `<strong>${shares.toLocaleString()}</strong>株 = <strong>${amountInput.value}</strong> 万円`;
+        }
+      } else {
+        if (searchInput && searchInput.value !== '') {
+          searchInput.value = '';
+          infoDiv.innerHTML = '';
+        }
+      }
+      updateDisplay();
+    }
+
+    function adjustShares(delta) {
+      if (selectedStockPrice <= 0) return;
+      const amountInput = document.getElementById('inputValue');
+      const infoDiv = document.getElementById('selectedStockInfo');
+      const currentShares = Math.round((parseFloat(amountInput.value) * 10000) / selectedStockPrice);
+      let newShares = currentShares + delta;
+      if (newShares < 100) newShares = 100;
+      const newWanYen = (selectedStockPrice * newShares) / 10000;
+      const newWanYenStr = newWanYen.toFixed(4).replace(/\.?0+$/, '');
+      amountInput.value = newWanYenStr;
+      infoDiv.innerHTML = `<strong>${newShares.toLocaleString()}</strong>株 = <strong>${newWanYenStr}</strong> 万円`;
+      updateDisplay();
+    }
+
     function updateDisplay() {
       getBusinessDaysForNext13Months();
     }
@@ -317,6 +641,12 @@
       let sampleParams = new URLSearchParams();
       let element = document.getElementById('inputValue');
       sampleParams.set("inputValue", element.value);
+
+      const searchInput = document.getElementById('stockSearchInput');
+      if (selectedStockPrice > 0 && searchInput && searchInput.value) {
+        sampleParams.set("stockQuery", searchInput.value);
+      }
+
       let url = "";
       if (type === 0) {
         url = `./index.html?${sampleParams.toString()}`;
@@ -324,12 +654,13 @@
         url = `./forSmbc.html?${sampleParams.toString()}`;
       } else {
         url = `./forRakutenMukigen.html?${sampleParams.toString()}`;
-      }    
+      }
       window.location.href = url;
       return false;
     }
 
     getBusinessDaysForNext13Months();
+    loadStockData();
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -340,4 +671,5 @@
     }
   </script>
 </body>
+
 </html>
