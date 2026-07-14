@@ -26,7 +26,6 @@ jobs:
         run: pip install pandas xlrd yfinance
 
       - name: Fetch Prices and Generate JSON
-        # ここから下が、GitHubの裏側で動くPythonプログラムです
         run: |
           python -c "
           import pandas as pd
@@ -37,29 +36,33 @@ jobs:
           url = 'https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xls'
           df = pd.read_excel(url)
           
-          # 'コード'列から数字だけを抽出
-          codes = df['コード'].astype(str).tolist()
+          # コードと銘柄名（会社名）をペアにして取得
+          # ※JPXのExcelにある列名「銘柄名」を使用します
+          stock_dict = dict(zip(df['コード'].astype(str), df['銘柄名'].astype(str)))
+          codes = list(stock_dict.keys())
           tickers = [c + '.T' for c in codes]
           
-          print(f'2. {len(codes)}銘柄の株価を取得中... (数分かかります)')
-          # yfinanceを使って全銘柄の直近の価格データを並列で一括ダウンロード
+          print(f'2. {len(codes)}銘柄の株価を取得中...')
           data = yf.download(tickers, period='1d', threads=True, progress=False)
           
           results = {}
           for code in codes:
               t = code + '.T'
               try:
-                  # 株価が存在すればJSON用の辞書に格納
                   price = data['Close'][t].dropna().iloc[-1]
-                  results[code] = float(price)
+                  
+                  # 価格だけでなく、会社名も一緒にJSONに格納します
+                  results[code] = {
+                      'name': stock_dict[code],
+                      'price': float(price)
+                  }
               except:
                   continue
           
-          # 3. data.jsonとして保存
           with open('data.json', 'w') as f:
-              json.dump(results, f)
+              json.dump(results, f, ensure_ascii=False) # 日本語が文字化けしないように保存
               
-          print('3. data.jsonの生成が完了しました！')
+          print('3. 会社名と価格が入ったdata.jsonの生成が完了しました！')
           "
 
       - name: Commit and Push changes
@@ -68,5 +71,5 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add data.json
           # 差分がある場合のみコミットしてプッシュする
-          git commit -m "📈 株価データを自動更新" || exit 0
+          git commit -m '📈 株価データを自動更新' || exit 0
           git push
