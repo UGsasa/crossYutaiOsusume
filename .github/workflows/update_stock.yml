@@ -3,7 +3,7 @@ name: Update Stock Data
 on:
   schedule:
     # 毎日 日本時間の16:00 (UTCの07:00) に実行
-    - cron: '0 7 * * 1-5'
+    - cron: '5 7 * * 1-5'
   workflow_dispatch:
 
 permissions:
