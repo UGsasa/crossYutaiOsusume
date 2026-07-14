@@ -1,0 +1,72 @@
+name: Update Stock Data
+
+on:
+  schedule:
+    # 毎日 日本時間の16:00 (UTCの07:00) に実行
+    - cron: '0 7 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        # 株価取得用のyfinanceと、JPXのExcelを読み込むためのxlrdをインストール
+        run: pip install pandas xlrd yfinance
+
+      - name: Fetch Prices and Generate JSON
+        # ここから下が、GitHubの裏側で動くPythonプログラムです
+        run: |
+          python -c "
+          import pandas as pd
+          import yfinance as yf
+          import json
+          
+          print('1. JPX公式から最新の上場銘柄リストを取得中...')
+          url = 'https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xls'
+          df = pd.read_excel(url)
+          
+          # 'コード'列から数字だけを抽出
+          codes = df['コード'].astype(str).tolist()
+          tickers = [c + '.T' for c in codes]
+          
+          print(f'2. {len(codes)}銘柄の株価を取得中... (数分かかります)')
+          # yfinanceを使って全銘柄の直近の価格データを並列で一括ダウンロード
+          data = yf.download(tickers, period='1d', threads=True, progress=False)
+          
+          results = {}
+          for code in codes:
+              t = code + '.T'
+              try:
+                  # 株価が存在すればJSON用の辞書に格納
+                  price = data['Close'][t].dropna().iloc[-1]
+                  results[code] = float(price)
+              except:
+                  continue
+          
+          # 3. data.jsonとして保存
+          with open('data.json', 'w') as f:
+              json.dump(results, f)
+              
+          print('3. data.jsonの生成が完了しました！')
+          "
+
+      - name: Commit and Push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add data.json
+          # 差分がある場合のみコミットしてプッシュする
+          git commit -m "📈 株価データを自動更新" || exit 0
+          git push
