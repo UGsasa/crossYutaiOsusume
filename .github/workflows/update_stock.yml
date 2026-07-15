@@ -2,7 +2,7 @@ name: Update Stock Data
 
 on:
   schedule:
-    # 毎日 日本時間の16:00 (UTCの07:00) に実行
+    # 毎日 日本時間の16:05 (UTCの07:05) に実行
     - cron: '5 7 * * 1-5'
   workflow_dispatch:
 
@@ -32,6 +32,7 @@ jobs:
           import yfinance as yf
           import json
           import time
+          from datetime import datetime, timedelta, timezone
           
           print('1. JPX公式から最新の上場銘柄リストを取得中...')
           url = 'https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xls'
@@ -45,7 +46,7 @@ jobs:
           
           # 大量一括リクエストによる取りこぼしを防ぐため、200銘柄ずつ小分けにして取得
           batch_size = 200
-          results = {}
+          stocks_data = {}
           
           for i in range(0, len(codes), batch_size):
               batch_codes = codes[i:i+batch_size]
@@ -67,7 +68,7 @@ jobs:
                                   
                               if not price_series.empty:
                                   price = price_series.iloc[-1]
-                                  results[code] = {
+                                  stocks_data[code] = {
                                       'name': stock_dict[code],
                                       'price': float(price)
                                   }
@@ -80,10 +81,20 @@ jobs:
               
               time.sleep(0.5) # サーバーに負荷をかけないよう少し休憩
           
-          with open('data.json', 'w') as f:
-              json.dump(results, f, ensure_ascii=False)
+          # 日本時間 (JST: UTC+9) の現在日時を取得してフォーマット
+          jst = timezone(timedelta(hours=9))
+          now_jst = datetime.now(jst).strftime('%Y-%m-%d %H:%M:%S')
+          
+          # メタデータ（更新日時）と株価データをセットにした構造にする
+          output_data = {
+              'updated_at': now_jst,
+              'stocks': stocks_data
+          }
+          
+          with open('data.json', 'w', encoding='utf-8') as f:
+              json.dump(output_data, f, ensure_ascii=False, indent=2)
               
-          print(f'3. 完了！ 取得成功: {len(results)}/{len(codes)} 銘柄')
+          print(f'3. 完了！ 取得成功: {len(stocks_data)}/{len(codes)} 銘柄')
           "
 
       - name: Commit and Push changes
