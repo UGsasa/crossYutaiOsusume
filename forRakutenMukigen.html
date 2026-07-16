@@ -22,6 +22,7 @@
       padding: 10px;
       max-width: 600px;
       margin: auto;
+      background-color: #faf8f5;
     }
 
     h1 {
@@ -202,6 +203,7 @@
     <summary style="cursor: pointer; color: #555; font-size: 0.9em;">前提条件・注意事項を表示</summary>
     <div style="margin-top: 10px; font-size: 0.9em;">
       <p style="margin: 5px 0;">※1 貸株料率は年利1.1%の前提で計算 </p>
+      <p style="margin: 5px 0;">※2 保持期間（購入日から売却可日まで）が1ヶ月超となるごとに事務管理費が発生 </p>
       <strong>
         <font color="blue">実際は下記日付の前営業日19時から注文可</font>
       </strong>
@@ -310,7 +312,6 @@
       function toKanaNormal(str) {
         if (!str) return "";
 
-        // 0. 全角英数字を半角に変換
         str = str.replace(/[Ａ-Ｚａ-ｚ０-９]/g, function (s) {
           return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
         });
@@ -326,7 +327,7 @@
         };
         let zenkaku = str.replace(/[ｱ-ﾝｧ-ｮｯｰ]/g, m => kanaMap[m] || m);
         zenkaku = zenkaku.replace(/（カ|キ|ク|ケ|コ）゛/g, m => String.fromCharCode(m.charCodeAt(0) + 1));
-        return zenkaku.replace(/[\u30a1-\u30f6]/g, match => {
+        return zenkaku.replace(/[ァ-ヶ]/g, match => {
           return String.fromCharCode(match.charCodeAt(0) - 0x60);
         });
       }
@@ -383,7 +384,6 @@
               amountInput.classList.add('has-stock');
 
               const priceFor100SharesInWanYen = (item.price * 100) / 10000;
-              // 浮動小数点の誤差を防ぎ、stepを文字列として設定
               const stepStr = priceFor100SharesInWanYen.toFixed(4).replace(/\.?0+$/, '');
               amountInput.setAttribute('step', stepStr);
               amountInput.setAttribute('min', stepStr);
@@ -416,11 +416,9 @@
       const kijyuntoday = new Date();
       kijyuntoday.setHours(0, 0, 0, 0);
 
-      // ★追加：15:30に関係なく、純粋な「今日」の日付
       const calendarToday = new Date();
       calendarToday.setHours(0, 0, 0, 0);
 
-      // 営業日基準の今日（15:30以降は翌営業日）
       const effectiveToday = await getEffectiveToday(holidays);
 
       for (let monthOffset = 0; monthOffset < 6; monthOffset++) {
@@ -444,7 +442,7 @@
         }
 
         const rakutenLastDay = await getNthBusinessDayBefore(adjustedFourteenDaysBeforeLast, 1, holidays);
-        const A_start = await getNthBusinessDayBefore(lastBusinessDay, 2, holidays); // ここ修正しました
+        const A_start = await getNthBusinessDayBefore(lastBusinessDay, 2, holidays);
 
         const A_Days = [];
         let previousDaysDifference = null;
@@ -453,7 +451,6 @@
         while (true) {
           const A = await getNthBusinessDayBefore(oneBusinessDayBefore, i, holidays);
 
-          // ★修正：判定を effectiveToday ではなく calendarToday に変更
           if (A < calendarToday) break;
 
           if (A >= adjustedFourteenDaysBeforeLast) {
@@ -466,10 +463,11 @@
           let mark = "";
 
           if (previousDaysDifference !== null && daysDifference - previousDaysDifference >= 2) {
-            mark = " → ×";
+            mark = " ✖";
           }
 
           A_Days.push({
+            A_obj: new Date(A), // 日付比較用にオブジェクトを保持
             A: formatDate(A),
             A_plus_2: formatDate(A_plus_2),
             daysDifference,
@@ -482,6 +480,7 @@
 
         if (A_Days.length > 0) {
           A_Days.push({
+            A_obj: new Date(effectiveToday),
             A: formatDate(effectiveToday),
             A_plus_2: formatDate(today_plus_2),
             daysDifference: today_daysDifference,
@@ -495,6 +494,7 @@
           rakutenLastDay: formatDate(rakutenLastDay),
           A_start: formatDate(A_start),
           oneBusinessDayBefore: formatDate(oneBusinessDayBefore),
+          oneBusinessDayBeforeObj: new Date(oneBusinessDayBefore), // 1ヶ月判定用
           A_Days
         });
       }
@@ -522,7 +522,15 @@
       const listElement = document.getElementById('business-days-list');
       listElement.innerHTML = "";
 
-      const inputValue = parseFloat(document.getElementById('inputValue').value) * 10000;
+      const amountInputVal = parseFloat(document.getElementById('inputValue').value);
+      const inputValue = amountInputVal * 10000;
+
+      // 現在の選択されている株数を計算（事務管理費算出用）
+      let shares = 100; // 銘柄未選択時は一律100株（1口）とする
+      if (selectedStockPrice > 0) {
+        shares = Math.round(inputValue / selectedStockPrice);
+        if (isNaN(shares) || shares < 0) shares = 0;
+      }
 
       const effectiveToday = await getEffectiveToday(holidays);
       const effectiveTodayStr = formatDate(effectiveToday);
@@ -534,14 +542,45 @@
                 楽天長期最終: <font color="red">${item.rakutenLastDay} 15:30迄</font> <br>`;
 
         item.A_Days.forEach((AData, index) => {
-          const calculatedValue = inputValue ? Math.floor(inputValue * 0.011 / 365 * AData.daysDifference) : "";
+          // 1. 貸株料の基本計算
+          let baseInterest = inputValue ? Math.floor(inputValue * 0.011 / 365 * AData.daysDifference) : 0;
+
+          // 2. 事務管理費の判定＆計算（経過月数に応じた累積計算）
+          let feeCount = 0;
+          let tempLimit = new Date(AData.A_obj);
+          
+          // 1ヶ月ずつ応当日を進めて、売却可能日を超えない限り回数をカウント
+          while (true) {
+            // 月を加算する（※JSのsetMonthは月末の回り込みに注意が必要ですが、ここでは単純な月加算、または日付を1日に固定して月差分を取るなどの方法が確実です）
+            // 応当日判定を厳密に行うため、tempLimitのコピーを作成
+            let nextLimit = new Date(AData.A_obj);
+            nextLimit.setMonth(nextLimit.getMonth() + (feeCount + 1));
+            
+            if (item.oneBusinessDayBeforeObj >= nextLimit) {
+              feeCount++;
+            } else {
+              break;
+            }
+          }
+
+          let managementFee = 0;
+          let feeDetailText = "";
+
+          if (feeCount > 0) {
+            // 1回あたりの事務管理費：1株につき11銭（税込）、最低110円、上限1,100円
+            let oneTimeFee = Math.max(110, Math.min(1100, Math.round(shares * 0.11)));
+            managementFee = oneTimeFee * feeCount;
+            feeDetailText = ` (+${managementFee}円込)`;
+          }
+
+          let calculatedValue = baseInterest + managementFee;
 
           let dateText = AData.A;
           if (AData.A === effectiveTodayStr) {
             dateText = `<span style="color:red; font-weight:bold;">${AData.A}</span>`;
           }
 
-          text += `購入日: ${dateText} (${AData.daysDifference}日) ${calculatedValue ? ` -- ${calculatedValue}円` : ""}${AData.mark}<br>`;
+          text += `購入日: ${dateText} (${AData.daysDifference}日) ${inputValue ? ` -- ${calculatedValue}円${feeDetailText}` : ""}${AData.mark}<br>`;
 
           if (index === item.A_Days.length - 2) {
             text += `<hr>`;
