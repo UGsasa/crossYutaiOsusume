@@ -201,7 +201,7 @@
   <details style="text-align: center; margin-bottom: 10px;">
     <summary style="cursor: pointer; color: #555; font-size: 0.9em;">前提条件・注意事項を表示</summary>
     <div style="margin-top: 10px; font-size: 0.9em;">
-      <p style="margin: 5px 0;">※1 貸株料率は年利1.9%の前提で計算 </br> ※2 買い方に制度信用金利3.27％が1日分<span
+      <p style="margin: 5px 0;">※1 貸株料率は年利1.9%の前提で計算 </br> ※2 買い方に制度信用金利3.54％が1日分<span
           id="oneDayCost">(0円)</span>かかる(金額には含み済)</p>
       <strong>
         <font color="blue">実際は下記日付の前営業日17時半から注文可</font>
@@ -580,7 +580,7 @@
       const inputValue = parseFloat(document.getElementById('inputValue').value) * 10000;
 
       if (inputValue && !isNaN(inputValue)) {
-        const inputValueKai = Math.floor(inputValue * 0.0327 / 365 * 1)
+        const inputValueKai = Math.floor(inputValue * 0.0354 / 365 * 1)
         span.textContent = `(${inputValueKai}円)`;
       } else {
         span.textContent = "";
@@ -595,7 +595,7 @@
                 最終購入: ${item.A_start} / 売却可: ${item.oneBusinessDayBefore} <br>`;
 
         item.A_Days.forEach((AData, index) => {
-          const calculatedValue = inputValue ? Math.floor(inputValue * 0.0327 / 365 * 1 + inputValue * 0.019 / 365 * AData.daysDifference) : "";
+          const calculatedValue = inputValue ? Math.floor(inputValue * 0.0354 / 365 * 1 + inputValue * 0.019 / 365 * AData.daysDifference) : "";
 
           let displayDate = AData.A;
           if (AData.A === effectiveTodayStr) {
