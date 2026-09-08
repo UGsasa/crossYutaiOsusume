@@ -22,8 +22,8 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        # 株価取得用のyfinanceと、JPXのExcelを読み込むためのxlrdをインストール
-        run: pip install pandas xlrd yfinance
+        # 株価取得用のyfinanceと、JPXのExcelを読み込むためのopenpyxlをインストール
+        run: pip install pandas openpyxl yfinance
 
       - name: Fetch Prices and Generate JSON
         run: |
@@ -35,8 +35,8 @@ jobs:
           from datetime import datetime, timedelta, timezone
           
           print('1. JPX公式から最新の上場銘柄リストを取得中...')
-          url = 'https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xls'
-          df = pd.read_excel(url)
+          url = 'https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xlsx'
+          df = pd.read_excel(url, engine='openpyxl')
           
           # コードと銘柄名（会社名）をペアにして取得
           stock_dict = dict(zip(df['コード'].astype(str), df['銘柄名'].astype(str)))
