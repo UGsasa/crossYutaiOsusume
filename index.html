@@ -365,7 +365,7 @@
           const normalizedName = toKanaNormal(name);
 
           // コード部分一致、またはひらがな化した名称同士での部分一致チェック
-          if (code.includes(rawQuery) || normalizedName.includes(query)) {
+          if (code.toLowerCase().includes(rawQuery) || normalizedName.includes(query)) {
             matches.push({ code, name: stock.name, price: stock.price });
           }
           if (matches.length >= 100) break;
