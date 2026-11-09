@@ -23,79 +23,234 @@ jobs:
 
       - name: Install dependencies
         # 株価取得用のyfinanceと、JPXのExcelを読み込むためのopenpyxlをインストール
-        run: pip install pandas openpyxl yfinance
+        # 失敗しても止めない（次のステップ側で安全に何もせず終わる）
+        run: pip install pandas openpyxl yfinance || echo "⚠️ ライブラリのインストールに失敗しました"
 
       - name: Fetch Prices and Generate JSON
+        # 方針: 何が起きても「前回の data.json より悪い状態」にはしない
+        #  - JPXリストが取れない／明らかに少ない → data.json を書き換えずに異常終了
+        #  - 株価が1件も取れない               → data.json を書き換えずに異常終了
+        #  - 一部だけ取れない                   → その銘柄は前回の値を残す
+        # 末尾の「|| echo」: 想定外のエラーでPythonが落ちても、このステップは失敗扱いにしない
+        # （data.json は最後に一括で置き換えるので、途中で落ちても前回のデータが残る）
         run: |
-          python -c "
-          import pandas as pd
-          import yfinance as yf
+          python - <<'PYEOF' || echo "⚠️ 想定外のエラーが発生しました。data.json は前回のまま残します。"
           import json
+          import os
+          import re
+          import sys
           import time
           from datetime import datetime, timedelta, timezone
-          
-          print('1. JPX公式から最新の上場銘柄リストを取得中...')
-          url = 'https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xlsx'
-          df = pd.read_excel(url, engine='openpyxl')
-          
-          # コードと銘柄名（会社名）をペアにして取得
-          stock_dict = dict(zip(df['コード'].astype(str), df['銘柄名'].astype(str)))
-          codes = list(stock_dict.keys())
-          
-          print(f'2. {len(codes)}銘柄の株価を小分けにして安全に取得中...')
-          
-          # 大量一括リクエストによる取りこぼしを防ぐため、200銘柄ずつ小分けにして取得
-          batch_size = 200
-          stocks_data = {}
-          
-          for i in range(0, len(codes), batch_size):
-              batch_codes = codes[i:i+batch_size]
-              batch_tickers = [c + '.T' for c in batch_codes]
-              
-              print(f'   -> [{i}/{len(codes)}] 取得中...')
+
+          import pandas as pd
+          import yfinance as yf
+
+          DATA_FILE = 'data.json'
+          JPX_URL = 'https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xlsx'
+
+          # 優待クロスの対象にならない区分は、そもそも株価を取りに行かない（リクエスト削減）
+          # JPXの「市場・商品区分」列の値に、これらの文字列が含まれていれば除外
+          EXCLUDE_SEGMENTS = ('ETF', 'REIT', 'PRO Market', '出資証券')
+
+          BATCH_SIZE = 200
+          SLEEP_BETWEEN_BATCHES = 2.0
+          # この数のバッチが連続で全滅したら、レート制限とみなしてその日の取得を打ち切る
+          # （無理に続けて制限を悪化させないため。取れなかった銘柄は前回値を残し、翌日優先して取得する）
+          MAX_CONSECUTIVE_EMPTY_BATCHES = 2
+
+          jst = timezone(timedelta(hours=9))
+
+
+          def abort(msg):
+              # 誰も監視しない前提のため、エラー終了にはせず正常終了扱いにする
+              # （data.json に触れずに終わるので、ページは前回のデータのまま動き続ける）
+              print(f'⚠️ {msg}')
+              print('   data.json は更新せず、前回のデータをそのまま残します。')
+              sys.exit(0)
+
+
+          # ------------------------------------------------------------
+          # 0. 前回の data.json を読み込む（失敗時の補完用）
+          # ------------------------------------------------------------
+          prev_stocks = {}
+          if os.path.exists(DATA_FILE):
               try:
-                  data = yf.download(batch_tickers, period='1d', threads=True, progress=False)
-                  
-                  for code in batch_codes:
+                  with open(DATA_FILE, encoding='utf-8') as f:
+                      prev = json.load(f)
+                  raw = prev.get('stocks', prev) if isinstance(prev, dict) else {}
+                  for code, v in raw.items():
+                      if isinstance(v, dict) and isinstance(v.get('price'), (int, float)) and v['price'] > 0:
+                          prev_stocks[str(code)] = v
+                  print(f'0. 前回データ: {len(prev_stocks)}銘柄')
+              except Exception as e:
+                  print(f'⚠️ 前回の data.json を読めませんでした（補完なしで続行）: {e}')
+          else:
+              print('0. 前回データなし（初回）')
+
+          # ------------------------------------------------------------
+          # 1. JPXの上場銘柄リストを取得
+          # ------------------------------------------------------------
+          print('1. JPX公式から最新の上場銘柄リストを取得中...')
+          try:
+              df = pd.read_excel(JPX_URL, engine='openpyxl')
+          except Exception as e:
+              abort(f'JPXの銘柄リストを取得できませんでした: {e}')
+
+          for col in ('コード', '銘柄名'):
+              if col not in df.columns:
+                  abort(f'JPXのExcelに「{col}」列がありません。列構成: {list(df.columns)}')
+
+          has_segment = '市場・商品区分' in df.columns
+          if not has_segment:
+              print('⚠️ 「市場・商品区分」列が見つからないため、区分による除外はせずに続行します')
+
+          names = {}
+          skipped_segment = 0
+          skipped_code = 0
+          for _, row in df.iterrows():
+              code = str(row['コード']).strip()
+              if code.endswith('.0'):
+                  code = code[:-2]
+              # 通常の4桁コード（英字入りの新コード 例:130A も含む）以外は対象外（優先株などの5桁コード）
+              if not re.fullmatch(r'[0-9][0-9A-Z]{3}', code):
+                  skipped_code += 1
+                  continue
+              if has_segment:
+                  seg = str(row['市場・商品区分'])
+                  if any(k in seg for k in EXCLUDE_SEGMENTS):
+                      skipped_segment += 1
+                      continue
+              names[code] = str(row['銘柄名']).strip()
+
+          print(f'   全{len(df)}件 → 対象 {len(names)}銘柄'
+                f'（区分で除外 {skipped_segment} / コード形式で除外 {skipped_code}）')
+
+          # リストが壊れている・形式が変わった可能性があるときは、既存データを守るため中止
+          if len(names) < 1000:
+              abort(f'対象銘柄が {len(names)} 件しかありません。JPXのファイルに異常がある可能性があります。')
+          if prev_stocks and len(names) < len(prev_stocks) * 0.7:
+              abort(f'対象銘柄が前回（{len(prev_stocks)}件）より大幅に少ない {len(names)} 件です。')
+
+          # ------------------------------------------------------------
+          # 2. 取得順を決める：前回データにない銘柄 → 取得日が古い銘柄 の順
+          #    （レート制限で後半が取れなくても、翌日はその銘柄が先頭に来る）
+          # ------------------------------------------------------------
+          def priority(code):
+              p = prev_stocks.get(code)
+              if p is None:
+                  return (0, '', code)
+              return (1, p.get('date') or '', code)
+
+          order = sorted(names.keys(), key=priority)
+
+          # ------------------------------------------------------------
+          # 3. 株価を取得
+          # ------------------------------------------------------------
+          print(f'2. {len(order)}銘柄の株価を取得中...')
+          fetched = {}
+          consecutive_empty = 0
+          stopped_early = False
+
+          for i in range(0, len(order), BATCH_SIZE):
+              batch = order[i:i + BATCH_SIZE]
+              tickers = [c + '.T' for c in batch]
+              got = 0
+
+              try:
+                  # period='5d': 当日に売買がなかった銘柄も直近の終値を拾えるようにする
+                  data = yf.download(tickers, period='5d', threads=True,
+                                     progress=False, auto_adjust=False)
+              except Exception as e:
+                  print(f'   ⚠️ バッチ取得エラー: {e}')
+                  data = None
+
+              if isinstance(data, pd.DataFrame) and not data.empty and 'Close' in data.columns:
+                  close = data['Close']
+                  for code in batch:
                       t = code + '.T'
                       try:
-                          # 1件取得の場合と複数件取得の場合のデータ構造の差異を吸収
-                          if isinstance(data, pd.DataFrame) and 'Close' in data.columns:
-                              if isinstance(data['Close'], pd.Series):
-                                  price_series = data['Close'].dropna()
-                              else:
-                                  price_series = data['Close'][t].dropna()
-                                  
-                              if not price_series.empty:
-                                  price = price_series.iloc[-1]
-                                  stocks_data[code] = {
-                                      'name': stock_dict[code],
-                                      'price': float(price)
-                                  }
-                      except:
+                          if isinstance(close, pd.Series):
+                              s = close
+                          elif t in close.columns:
+                              s = close[t]
+                          elif len(batch) == 1 and len(close.columns) == 1:
+                              s = close.iloc[:, 0]
+                          else:
+                              continue
+                          s = s.dropna()
+                          if s.empty:
+                              continue
+                          price = float(s.iloc[-1])
+                          if not price > 0:
+                              continue
+                          fetched[code] = {
+                              'price': price,
+                              'date': pd.Timestamp(s.index[-1]).strftime('%Y-%m-%d'),
+                          }
+                          got += 1
+                      except Exception:
                           continue
-              except Exception as e:
-                  print(f'   ⚠️ バッチ取得エラー (リトライします): {e}')
-                  time.sleep(2)
-                  continue
-              
-              time.sleep(0.5) # サーバーに負荷をかけないよう少し休憩
-          
-          # 日本時間 (JST: UTC+9) の現在日時を取得してフォーマット
-          jst = timezone(timedelta(hours=9))
-          now_jst = datetime.now(jst).strftime('%Y-%m-%d %H:%M:%S')
-          
-          # メタデータ（更新日時）と株価データをセットにした構造にする
+
+              print(f'   -> [{i}/{len(order)}] 成功 {got}/{len(batch)}')
+
+              if got == 0:
+                  consecutive_empty += 1
+                  if consecutive_empty >= MAX_CONSECUTIVE_EMPTY_BATCHES:
+                      stopped_early = True
+                      print(f'   ⚠️ {consecutive_empty}バッチ連続で全滅したため、今日の取得はここで打ち切ります'
+                            '（残りは前回値を使用し、次回優先して取得します）')
+                      break
+              else:
+                  consecutive_empty = 0
+
+              time.sleep(SLEEP_BETWEEN_BATCHES)
+
+          if not fetched:
+              abort('株価を1件も取得できませんでした（レート制限などの可能性）。')
+
+          # ------------------------------------------------------------
+          # 4. 前回データとマージ
+          #    - 今回取れた銘柄   → 新しい値
+          #    - 取れなかった銘柄 → 前回の値を残す（銘柄名だけは最新のJPXリストに合わせる）
+          #    - JPXリストにない銘柄（上場廃止・対象外区分） → 削除
+          # ------------------------------------------------------------
+          stocks = {}
+          kept_prev = 0
+          no_data = []
+          for code in sorted(names.keys()):
+              if code in fetched:
+                  stocks[code] = {'name': names[code], **fetched[code]}
+              elif code in prev_stocks:
+                  p = prev_stocks[code]
+                  entry = {'name': names[code], 'price': float(p['price'])}
+                  if p.get('date'):
+                      entry['date'] = p['date']
+                  stocks[code] = entry
+                  kept_prev += 1
+              else:
+                  no_data.append(code)
+
+          removed = [c for c in prev_stocks if c not in names]
+
           output_data = {
-              'updated_at': now_jst,
-              'stocks': stocks_data
+              'updated_at': datetime.now(jst).strftime('%Y-%m-%d %H:%M:%S'),
+              'stocks': stocks,
           }
-          
-          with open('data.json', 'w', encoding='utf-8') as f:
+
+          # 書き込み途中で落ちても data.json が壊れないよう、一時ファイル経由で置き換える
+          tmp_file = DATA_FILE + '.tmp'
+          with open(tmp_file, 'w', encoding='utf-8') as f:
               json.dump(output_data, f, ensure_ascii=False, indent=2)
-              
-          print(f'3. 完了！ 取得成功: {len(stocks_data)}/{len(codes)} 銘柄')
-          "
+          os.replace(tmp_file, DATA_FILE)
+
+          print('3. 完了！')
+          print(f'   今回取得成功     : {len(fetched)}/{len(order)} 銘柄'
+                + ('（途中で打ち切り）' if stopped_early else ''))
+          print(f'   前回値で補完     : {kept_prev} 銘柄')
+          print(f'   データなし       : {len(no_data)} 銘柄 {no_data[:50]}{" ..." if len(no_data) > 50 else ""}')
+          print(f'   リストから削除   : {len(removed)} 銘柄')
+          print(f'   data.json 掲載数 : {len(stocks)} 銘柄')
+          PYEOF
 
       - name: Commit and Push changes
         run: |
@@ -104,4 +259,5 @@ jobs:
           git add data.json
           # 差分がある場合のみコミットしてプッシュする
           git commit -m '📈 株価データを自動更新' || exit 0
-          git push
+          # push に失敗しても止めない（翌日の実行で改めて反映される）
+          git push || echo "⚠️ push に失敗しました。次回の実行で反映されます。"
