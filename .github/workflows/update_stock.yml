@@ -259,5 +259,19 @@ jobs:
           git add data.json
           # 差分がある場合のみコミットしてプッシュする
           git commit -m '📈 株価データを自動更新' || exit 0
-          # push に失敗しても止めない（翌日の実行で改めて反映される）
-          git push || echo "⚠️ push に失敗しました。次回の実行で反映されます。"
+          # push は GitHub 側の一時的なエラー（例: fatal error in commit_refs_rules）で
+          # 失敗することがあるため、間隔をあけて最大5回やり直す
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "✅ push 成功（${i}回目）"
+              exit 0
+            fi
+            echo "⚠️ push 失敗（${i}回目）。30秒後にやり直します..."
+            sleep 30
+            # 途中で main が進んでいた場合に備えて、最新を取り込んでから再挑戦
+            git pull --rebase origin main || git rebase --abort || true
+          done
+          # 全部失敗したら ❌ にして GitHub からの通知で気づけるようにする
+          # （data.json はリポジトリ上では前回のまま。次回の実行で改めて反映される）
+          echo "::error::push に5回失敗しました。data.json は更新されていません。"
+          exit 1
